@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+prototype/ref_apple
+fase0/resultaten/
+*.npy
+.DS_Store
