@@ -33,6 +33,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.delay
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -58,6 +60,7 @@ import nl.markmaaktmedia.daglicht.UiState
 import nl.markmaaktmedia.daglicht.scan.Photo
 import nl.markmaaktmedia.daglicht.scan.Status
 import nl.markmaaktmedia.daglicht.ui.components.DaglichtDialog
+import nl.markmaaktmedia.daglicht.ui.components.DaglichtIconButton
 import nl.markmaaktmedia.daglicht.ui.components.EmptyState
 import nl.markmaaktmedia.daglicht.ui.components.SecondaryPillButton
 import nl.markmaaktmedia.daglicht.ui.components.PillSpinner
@@ -111,6 +114,9 @@ fun GalleryScreen(
 ) {
     // Opruimen: welke dag en welke foto's van die dag. Pas na een bevestiging gaat er iets naar de prullenbak.
     var cleanup by remember { mutableStateOf<Pair<String, List<Photo>>?>(null) }
+    // Alles uitzetten kan per ongeluk; een paar seconden lang kun je het ongedaan maken.
+    var cleared by remember { mutableStateOf<List<Photo>>(emptyList()) }
+    LaunchedEffect(cleared) { if (cleared.isNotEmpty()) { delay(6000); cleared = emptyList() } }
     val shown = remember(state.photos, filter) { state.photos.filter(filter::matches) }
     val today = remember { LocalDate.now(zone) }
     val todayLabel = stringResource(R.string.day_today)
@@ -161,7 +167,12 @@ fun GalleryScreen(
                 else -> PhotoGrid(entries, shown, todayLabel, yesterdayLabel, today, onSelect, onOpen) { label, photos -> cleanup = label to photos }
             }
             if (hasPermission && state.photos.isNotEmpty()) {
-                SelectionBar(state, onOverview, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(start = 20.dp, end = 20.dp, bottom = 90.dp))
+                SelectionBar(
+                    state, onOverview, cleared.isNotEmpty(),
+                    onClear = { val on = state.photos.filter { it.selectable && it.selected }; cleared = on; onSelect(on, false) },
+                    onUndo = { onSelect(cleared, true); cleared = emptyList() },
+                    modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(start = 20.dp, end = 20.dp, bottom = 90.dp),
+                )
             }
         }
     }
@@ -348,27 +359,44 @@ private fun Tile(photo: Photo, onToggle: () -> Unit, onOpen: () -> Unit) {
     }
 }
 
-/** Onderaan: hoeveel er meegaat en wat dat scheelt. Tik op de tekst voor het overzicht. */
+/** Onderaan: hoeveel er bewaard is en wat dat scheelt. Het kruisje zet alles uit; tik op de tekst voor het overzicht. */
 @Composable
-private fun SelectionBar(state: UiState, onOverview: () -> Unit, modifier: Modifier = Modifier) {
+private fun SelectionBar(
+    state: UiState,
+    onOverview: () -> Unit,
+    justCleared: Boolean,
+    onClear: () -> Unit,
+    onUndo: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val context = LocalContext.current
     val s = state.summary
     Surface(modifier.fillMaxWidth(), shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh, tonalElevation = 3.dp) {
         Row(Modifier.padding(start = 20.dp, end = 8.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Column(Modifier.weight(1f).bouncyClickable(onClick = onOverview)) {
-                Text(
-                    if (s.goingCount == 0) stringResource(R.string.gallery_none) else stringResource(R.string.gallery_selected, s.goingCount),
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                if (s.goingCount > 0) Text(
-                    stringResource(R.string.today_sizes, formatBytes(s.currentBytes), formatBytes(s.expectedBytes)),
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
-                )
+            if (justCleared) {
+                Text(stringResource(R.string.gallery_cleared), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                PrimaryPillButton(stringResource(R.string.gallery_undo), onUndo)
+            } else {
+                Column(Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            if (s.goingCount == 0) stringResource(R.string.gallery_none) else stringResource(R.string.gallery_selected, s.goingCount),
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.bouncyClickable(onClick = onOverview),
+                        )
+                        if (s.goingCount > 0) DaglichtIconButton(DaglichtIcons.Close, stringResource(R.string.gallery_deselect_all), onClear, size = 32, iconSize = 16, background = MaterialTheme.colorScheme.surfaceContainerHighest)
+                    }
+                    if (s.goingCount > 0) Text(
+                        stringResource(R.string.today_sizes, formatBytes(s.currentBytes), formatBytes(s.expectedBytes)),
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
+                        modifier = Modifier.bouncyClickable(onClick = onOverview),
+                    )
+                }
+                PrimaryPillButton(stringResource(R.string.gallery_prepare), {
+                    // Fase 1 leest alleen; het omzetten volgt na Mark's OK voor fase 2.
+                    Toast.makeText(context, R.string.gallery_prepare_soon, Toast.LENGTH_SHORT).show()
+                })
             }
-            PrimaryPillButton(stringResource(R.string.gallery_prepare), {
-                // Fase 1 leest alleen; het omzetten volgt na Mark's OK voor fase 2.
-                Toast.makeText(context, R.string.gallery_prepare_soon, Toast.LENGTH_SHORT).show()
-            })
         }
     }
 }
