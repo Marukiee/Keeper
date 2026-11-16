@@ -9,7 +9,6 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -34,6 +33,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.delay
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -118,10 +122,8 @@ fun GalleryScreen(
 ) {
     // Opruimen: welke dag en welke foto's van die dag. Pas na een bevestiging gaat er iets naar de prullenbak.
     var cleanup by remember { mutableStateOf<Pair<String, List<Photo>>?>(null) }
-    // Selectiemodus: begint met een lange druk. Terug sluit hem en houdt wat je veranderd hebt; het kruisje zet alles terug
-    // zoals het was toen de modus begon. Alleen de wijzigingen uit deze modus, dus Lightroom-exports blijven aan staan.
+    // Selectiemodus: begint met een lange druk. Terug sluit hem en houdt wat je gekozen hebt; het kruisje zet alles uit en sluit hem.
     var selecting by remember { mutableStateOf(false) }
-    var atEntry by remember { mutableStateOf<Set<Long>>(emptySet()) }
     BackHandler(enabled = selecting) { selecting = false }
     val shown = remember(state.photos, filter) { state.photos.filter(filter::matches) }
     val today = remember { LocalDate.now(zone) }
@@ -171,16 +173,15 @@ fun GalleryScreen(
                     )
                 }
                 else -> PhotoGrid(entries, shown, todayLabel, yesterdayLabel, today, selecting, {
-        if (!selecting) { atEntry = state.photos.filter { it.selectable && it.selected }.map { it.item.id }.toSet(); selecting = true }
+        selecting = true
     }, onSelect, onOpen) { label, photos -> cleanup = label to photos }
             }
             if (hasPermission && state.photos.isNotEmpty()) {
                 SelectionBar(
                     state, selecting, onOverview,
                     onCancel = {
-                        val all = state.photos.filter { it.selectable }
-                        onSelect(all.filter { it.selected && it.item.id !in atEntry }, false)
-                        onSelect(all.filter { !it.selected && it.item.id in atEntry }, true)
+                        // Het kruisje deselecteert alles, zoals in Google Foto's: de volgende selectie begint leeg.
+                        onSelect(state.photos.filter { it.selectable && it.selected }, false)
                         selecting = false
                     },
                     modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(start = 20.dp, end = 20.dp, bottom = 90.dp),
@@ -240,7 +241,7 @@ private fun PhotoGrid(
     val gridState = rememberLazyGridState()
     val scope = rememberCoroutineScope()
     val haptics = LocalHapticFeedback.current
-    val byId = remember(shown) { shown.associateBy { it.item.id } }
+    val byId by rememberUpdatedState(remember(shown) { shown.associateBy { it.item.id } })
     val select by rememberUpdatedState(onSelect)
     val startSelecting by rememberUpdatedState(onStartSelecting)
     // Een lange druk eindigt ook in een tik; die mag de foto niet openen. De volgorde waarin tik en slepen klaar zijn
@@ -253,8 +254,11 @@ private fun PhotoGrid(
         contentPadding = PaddingValues(start = 4.dp, end = 4.dp, bottom = 204.dp),
         horizontalArrangement = Arrangement.spacedBy(3.dp),
         verticalArrangement = Arrangement.spacedBy(3.dp),
-        modifier = Modifier.fillMaxSize().pointerInput(byId) {
+        modifier = Modifier.fillMaxSize().pointerInput(Unit) {
             // Ingedrukt houden en slepen: de eerste foto bepaalt of het aan of uit wordt, alle foto's die je raakt volgen.
+            // De sleutel is Unit: een nieuwe fotolijst (na de eerste selectie) mag het lopende gebaar niet afbreken, byId wordt bijgewerkt gelezen.
+            // Dit gebaar kijkt in de Initial-fase, vóór het raster zelf: anders pakt het raster de sleepbeweging op om te scrollen
+            // en wordt de selectie na de eerste foto afgebroken. Zolang de vinger omlaag blijft, eten wij de beweging op.
             var mode: Boolean? = null
             val seen = HashSet<Long>()
             fun hit(position: Offset): Photo? = gridState.layoutInfo.visibleItemsInfo.firstOrNull { info ->
@@ -267,23 +271,56 @@ private fun PhotoGrid(
                 mode = on
                 select(listOf(photo), on)
             }
-            detectDragGesturesAfterLongPress(
-                onDragStart = { position ->
-                    seen.clear(); mode = null; lastLongPress[0] = SystemClock.uptimeMillis(); startSelecting()
-                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                    hit(position)?.let(::apply)
-                },
-                onDrag = { change, _ ->
-                    change.consume()
-                    hit(change.position)?.let(::apply)
-                    // Bij de rand van het scherm schuift de galerij mee.
-                    val edge = 160f
-                    if (change.position.y < edge) scope.launch { gridState.scrollBy(-36f) }
-                    else if (change.position.y > size.height - edge) scope.launch { gridState.scrollBy(36f) }
-                },
-                onDragEnd = { seen.clear(); mode = null; lastLongPress[0] = SystemClock.uptimeMillis() },
-                onDragCancel = { seen.clear(); mode = null; lastLongPress[0] = SystemClock.uptimeMillis() },
-            )
+            val slop = viewConfiguration.touchSlop
+            val edge = 180f
+            awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                // Een lange druk is: de vinger blijft liggen, binnen de slop, tot de time-out. Beweegt hij of gaat hij weg, dan is het een tik of scroll.
+                val moved = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+                    while (true) {
+                        val change = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == down.id } ?: return@withTimeoutOrNull true
+                        if (!change.pressed || (change.position - down.position).getDistance() > slop) return@withTimeoutOrNull true
+                    }
+                    @Suppress("UNREACHABLE_CODE")
+                    false
+                }
+                if (moved != null) return@awaitEachGesture
+                seen.clear(); mode = null; lastLongPress[0] = SystemClock.uptimeMillis(); startSelecting()
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                hit(down.position)?.let(::apply)
+                var last = down.position
+                var direction = 0
+                var speed = 0f
+                // Blijft de vinger bij de rand liggen, dan schuift de galerij door en volgen de foto's die langskomen.
+                val scroller = scope.launch {
+                    while (true) {
+                        if (direction != 0) {
+                            gridState.scrollBy(direction * speed)
+                            hit(last)?.let(::apply)
+                        }
+                        delay(16)
+                    }
+                }
+                try {
+                    while (true) {
+                        val change = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == down.id } ?: break
+                        change.consume()
+                        if (!change.pressed) break
+                        last = change.position
+                        hit(last)?.let(::apply)
+                        val top = last.y
+                        val bottom = size.height - last.y
+                        when {
+                            top < edge -> { direction = -1; speed = 8f + (edge - top).coerceIn(0f, edge) / edge * 34f }
+                            bottom < edge -> { direction = 1; speed = 8f + (edge - bottom).coerceIn(0f, edge) / edge * 34f }
+                            else -> direction = 0
+                        }
+                    }
+                } finally {
+                    scroller.cancel()
+                    seen.clear(); mode = null; lastLongPress[0] = SystemClock.uptimeMillis()
+                }
+            }
         },
     ) {
         items(entries, key = { if (it is Entry.Cell) it.photo.item.id else (it as Entry.Header).day.toString() }, span = { if (it is Entry.Header) GridItemSpan(maxLineSpan) else GridItemSpan(1) }) { entry ->
@@ -379,7 +416,7 @@ private fun Tile(photo: Photo, selecting: Boolean, onToggle: () -> Unit, onOpen:
 
 /**
  * Onderaan: hoeveel er bewaard is en wat dat scheelt, tik op de tekst voor het overzicht. Naast de hoofdknop staat in
- * selectiemodus het kruisje: dat zet de selectie terug zoals ze was bij het begin van de modus en sluit hem.
+ * selectiemodus het kruisje: dat deselecteert alles en sluit de modus.
  */
 @Composable
 private fun SelectionBar(

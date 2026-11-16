@@ -81,7 +81,7 @@
     <string name="gallery_title">Galerij</string>
     <string name="gallery_sub">%1$d foto\'s sinds %2$s</string>
     <string name="gallery_selected">%1$d bewaard</string>
-    <string name="gallery_deselect_all">Selectie annuleren</string>
+    <string name="gallery_deselect_all">Alles deselecteren</string>
     <string name="gallery_cleared">Selectie gewist</string>
     <string name="gallery_undo">Ongedaan maken</string>
     <string name="gallery_none">Nog niets bewaard</string>

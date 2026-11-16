@@ -44,6 +44,13 @@ werkt op elke foto, ook zonder het camerafilter. Voor Fresh en Vintage dezelfde 
 Besluiten van Mark (2026-11-16): tone map **normaal** (belichting 0,90, knie 0,45, mix 0,5, piek uit de inhoud gemeten) is de
 standaard; JPEG-kwaliteit jpegli **q94** (instelbaar q90 tot q95); OK voor fase 1.
 
+Selecteren in de galerij (2026-11-16): lang indrukken start de selectiemodus en slepen selecteert door (de eerste foto bepaalt aan of uit, autoscroll bij de boven- en onderrand).
+Het gebaar zit in `PhotoGrid` als eigen `awaitEachGesture` in de Initial-pass en heeft sleutel `Unit`: een sleutel op de fotolijst brak het gebaar na de eerste foto af,
+want elke selectie levert een nieuwe lijst. Het kruisje in de balk deselecteert alles en sluit de modus (voorheen zette het de selectie terug naar het begin van de modus, waardoor oude keuzes terugkwamen).
+Op de telefoon getest met `input draganddrop`. Oudere foto's: de scanner kijkt alleen naar `DCIM/Camera` en de Lightroom-map sinds `sinceMs` (standaard 7 dagen, `KeeperPrefs.setSinceMs` bestaat, maar er is nog geen instelling in de UI).
+Plan voor bestaande foto's die al in Immich staan: de omzetting moet eerst af (metadata, MediaStore-uitvoer, Convert-knop), dan een "Toon foto's vanaf"-instelling, omzetten naar `Pictures/Keeper`, controleren in Immich en pas dan de grote originelen weghalen.
+Immich's `replaceAsset` is deprecated (v1.142 docs; de Lightroom-plugin ging over op verwijderen plus uploaden), dus geen vervangen op de server.
+
 Model van de galerij: bewaard (vinkje) is wat meegaat naar de uitvoermap en blijft staan. Camera-JPG's en RAW's staan standaard
 **uit**, Lightroom-exports en Galerij-bewerkingen standaard **aan**. Opruimen (per dag) stuurt alleen niet-bewaarde camera-JPG's
 zonder hartje naar de prullenbak; RAW's, exports, bewerkingen en hun originelen blijven altijd staan.
