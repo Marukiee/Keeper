@@ -50,7 +50,7 @@ enum class Status {
     Done,
 }
 
-data class Photo(val item: MediaItem, val status: Status, val hdr: Boolean) {
+data class Photo(val item: MediaItem, val status: Status, val hdr: Boolean, val rejected: Boolean = false) {
     /** Gaat mee naar de uitvoermap. */
     val goesAlong get() = status in ALONG
     /** Moet door de HDR-naar-SDR-conversie. */
@@ -59,6 +59,8 @@ data class Photo(val item: MediaItem, val status: Status, val hdr: Boolean) {
     val selectable get() = status in SELECTABLE
     /** Aan betekent: gaat mee. Dat is het vinkje in de galerij. */
     val selected get() = goesAlong
+    /** Bewust niet bewaard (kruisknop): krijgt een kruisje in de galerij. */
+    val discarded get() = rejected && selectable && !goesAlong
     /**
      * Mag Opruimen deze naar de prullenbak sturen? Alleen camera-JPG's die niet bewaard zijn en geen favoriet.
      * RAW's, Lightroom-exports, Galerij-bewerkingen en originelen daarvan blijven altijd staan.

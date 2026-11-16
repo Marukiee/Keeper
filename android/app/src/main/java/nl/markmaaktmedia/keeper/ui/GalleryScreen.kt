@@ -242,6 +242,8 @@ private fun PhotoGrid(
     val scope = rememberCoroutineScope()
     val haptics = LocalHapticFeedback.current
     val byId by rememberUpdatedState(remember(shown) { shown.associateBy { it.item.id } })
+    val order by rememberUpdatedState(shown)
+    val indexOf by rememberUpdatedState(remember(shown) { shown.withIndex().associate { it.value.item.id to it.index } })
     val select by rememberUpdatedState(onSelect)
     val startSelecting by rememberUpdatedState(onStartSelecting)
     // Een lange druk eindigt ook in een tik; die mag de foto niet openen. De volgorde waarin tik en slepen klaar zijn
@@ -255,21 +257,42 @@ private fun PhotoGrid(
         horizontalArrangement = Arrangement.spacedBy(3.dp),
         verticalArrangement = Arrangement.spacedBy(3.dp),
         modifier = Modifier.fillMaxSize().pointerInput(Unit) {
-            // Ingedrukt houden en slepen: de eerste foto bepaalt of het aan of uit wordt, alle foto's die je raakt volgen.
-            // De sleutel is Unit: een nieuwe fotolijst (na de eerste selectie) mag het lopende gebaar niet afbreken, byId wordt bijgewerkt gelezen.
-            // Dit gebaar kijkt in de Initial-fase, vóór het raster zelf: anders pakt het raster de sleepbeweging op om te scrollen
-            // en wordt de selectie na de eerste foto afgebroken. Zolang de vinger omlaag blijft, eten wij de beweging op.
+            // Ingedrukt houden en slepen, zoals in Google Foto's: de foto waar je begint is het anker, en alles in leesvolgorde tussen
+            // het anker en waar je vinger nu is wordt aan of uit gezet (de eerste foto bepaalt welk van de twee). Schuif je terug,
+            // dan krimpt de reeks en krijgen de foto's die er niet meer in zitten hun oude stand terug.
+            // De sleutel is Unit: een nieuwe fotolijst (na de eerste selectie) mag het lopende gebaar niet afbreken, de lijst wordt bijgewerkt gelezen.
+            // Dit gebaar kijkt in de Initial-fase, vóór het raster zelf: anders pakt het raster de sleepbeweging op om te scrollen.
             var mode: Boolean? = null
-            val seen = HashSet<Long>()
-            fun hit(position: Offset): Photo? = gridState.layoutInfo.visibleItemsInfo.firstOrNull { info ->
-                position.x >= info.offset.x && position.x < info.offset.x + info.size.width &&
-                    position.y >= info.offset.y && position.y < info.offset.y + info.size.height
-            }?.let { byId[it.key as? Long] }
-            fun apply(photo: Photo) {
-                if (!photo.selectable || !seen.add(photo.item.id)) return
-                val on = mode ?: !photo.selected
+            var anchor = -1
+            var lastIndex = -1
+            var touched = HashSet<Long>()
+            val original = HashMap<Long, Boolean>()
+            fun reset() { mode = null; anchor = -1; lastIndex = -1; touched = HashSet(); original.clear() }
+            fun hit(position: Offset): Photo? {
+                val tiles = gridState.layoutInfo.visibleItemsInfo.filter { it.key is Long }
+                val at = tiles.firstOrNull { info ->
+                    position.x >= info.offset.x && position.x < info.offset.x + info.size.width &&
+                        position.y >= info.offset.y && position.y < info.offset.y + info.size.height
+                } ?: tiles.filter { position.y >= it.offset.y && position.y < it.offset.y + it.size.height }
+                    // tussen twee tegels of naast de laatste van een rij: de dichtstbijzijnde tegel in die rij
+                    .minByOrNull { kotlin.math.abs(it.offset.x + it.size.width / 2f - position.x) }
+                return at?.let { byId[it.key as? Long] }
+            }
+            fun extend(photo: Photo) {
+                val j = indexOf[photo.item.id] ?: return
+                if (j == lastIndex) return
+                lastIndex = j
+                if (anchor < 0) anchor = j
+                val inRange = order.subList(minOf(anchor, j), maxOf(anchor, j) + 1).filter { it.selectable }
+                val on = mode ?: inRange.firstOrNull()?.let { !it.selected } ?: return
                 mode = on
-                select(listOf(photo), on)
+                val ids = inRange.mapTo(HashSet()) { it.item.id }
+                val add = inRange.filter { it.item.id !in touched }
+                add.forEach { original.getOrPut(it.item.id) { it.selected } }
+                if (add.isNotEmpty()) select(add, on)
+                val drop = touched.filter { it !in ids }.mapNotNull { byId[it] }
+                for ((was, group) in drop.groupBy { original.getValue(it.item.id) }) select(group, was)
+                touched = ids
             }
             val slop = viewConfiguration.touchSlop
             val edge = 180f
@@ -285,9 +308,9 @@ private fun PhotoGrid(
                     false
                 }
                 if (moved != null) return@awaitEachGesture
-                seen.clear(); mode = null; lastLongPress[0] = SystemClock.uptimeMillis(); startSelecting()
+                reset(); lastLongPress[0] = SystemClock.uptimeMillis(); startSelecting()
                 haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                hit(down.position)?.let(::apply)
+                hit(down.position)?.let(::extend)
                 var last = down.position
                 var direction = 0
                 var speed = 0f
@@ -296,7 +319,7 @@ private fun PhotoGrid(
                     while (true) {
                         if (direction != 0) {
                             gridState.scrollBy(direction * speed)
-                            hit(last)?.let(::apply)
+                            hit(last)?.let(::extend)
                         }
                         delay(16)
                     }
@@ -307,7 +330,7 @@ private fun PhotoGrid(
                         change.consume()
                         if (!change.pressed) break
                         last = change.position
-                        hit(last)?.let(::apply)
+                        hit(last)?.let(::extend)
                         val top = last.y
                         val bottom = size.height - last.y
                         when {
@@ -318,7 +341,7 @@ private fun PhotoGrid(
                     }
                 } finally {
                     scroller.cancel()
-                    seen.clear(); mode = null; lastLongPress[0] = SystemClock.uptimeMillis()
+                    reset(); lastLongPress[0] = SystemClock.uptimeMillis()
                 }
             }
         },
@@ -381,6 +404,21 @@ private fun SelectCircle(selected: Boolean, onClick: () -> Unit, modifier: Modif
     }
 }
 
+/** Vinkje (bewaard) of kruisje (niet bewaard) op een tegel, ook als je niet aan het selecteren bent. */
+@Composable
+private fun DecisionBadge(kept: Boolean, modifier: Modifier = Modifier) {
+    val scheme = MaterialTheme.colorScheme
+    Box(
+        modifier.size(24.dp).clip(CircleShape).background(if (kept) scheme.primary else scheme.errorContainer),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            if (kept) KeeperIcons.Check else KeeperIcons.Close, stringResource(if (kept) R.string.tile_kept else R.string.tile_discarded),
+            tint = if (kept) scheme.onPrimary else scheme.onErrorContainer, modifier = Modifier.size(16.dp),
+        )
+    }
+}
+
 @Composable
 private fun Tile(photo: Photo, selecting: Boolean, onToggle: () -> Unit, onOpen: () -> Unit) {
     val selected = photo.selected
@@ -400,6 +438,8 @@ private fun Tile(photo: Photo, selecting: Boolean, onToggle: () -> Unit, onOpen:
             Modifier.fillMaxSize().graphicsLayer { scaleX = scale; scaleY = scale; alpha = dim; shape = RoundedCornerShape(corner); clip = true },
         )
         if (selecting && photo.selectable) SelectCircle(selected, onToggle, Modifier.align(Alignment.TopStart))
+        // Buiten de selectiemodus: een vinkje bij wat bewaard is en een kruisje bij wat je bewust hebt weggedaan.
+        else if (photo.selectable && (selected || photo.discarded)) DecisionBadge(selected, Modifier.align(Alignment.TopStart).padding(8.dp))
         if (photo.item.isFavorite) {
             Box(Modifier.align(Alignment.TopEnd).padding(8.dp).size(24.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.32f)), contentAlignment = Alignment.Center) {
                 Icon(KeeperIcons.Favorite, null, tint = Color(0xFFFF8FA3), modifier = Modifier.size(14.dp))

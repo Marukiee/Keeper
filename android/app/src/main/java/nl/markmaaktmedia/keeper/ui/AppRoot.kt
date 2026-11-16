@@ -103,7 +103,7 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
         ) { (currentSub, currentTab) ->
             when (currentSub) {
                 Sub.Viewer -> viewer?.let { request ->
-                    ViewerScreen(request.ids, request.startId, state.photos, { photo, on -> vm.select(listOf(photo), on) }, { photo -> trash(listOf(photo)) }, { sub = Sub.None })
+                    ViewerScreen(request.ids, request.startId, state.photos, { photo, on -> vm.select(listOf(photo), on) }, { photo -> vm.reject(listOf(photo)) }, { photo -> trash(listOf(photo)) }, { sub = Sub.None })
                 }
                 Sub.Overview -> TodayScreen(state, permitted, { ask.launch(Manifest.permission.READ_MEDIA_IMAGES) }, { tab = 1; sub = Sub.None }, { sub = Sub.None }, padding)
                 Sub.Updates -> UpdatesScreen({ sub = Sub.None }, padding)

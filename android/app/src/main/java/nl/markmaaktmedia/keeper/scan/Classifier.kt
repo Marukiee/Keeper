@@ -23,6 +23,7 @@ object Classifier {
         kept: Set<String>,
         doneNames: Set<String>,
         lightroomFolder: String,
+        rejected: Set<String> = emptySet(),
     ): List<Photo> {
         val live = items.filterNot(::isIgnored)
         val inLightroom = { i: MediaItem -> i.relativePath.startsWith(lightroomFolder, ignoreCase = true) }
@@ -50,7 +51,7 @@ object Classifier {
                 item.isJpeg -> if (hdr) Status.Convert else Status.AsIs
                 else -> return@mapNotNull null
             }
-            Photo(item, status, hdr)
+            Photo(item, status, hdr, item.name in rejected)
         }.sortedByDescending { it.item.dateTakenMs.takeIf { t -> t > 0 } ?: it.item.dateAddedMs }
     }
 

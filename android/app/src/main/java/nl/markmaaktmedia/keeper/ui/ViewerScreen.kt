@@ -29,6 +29,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import nl.markmaaktmedia.keeper.graph
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -74,8 +75,8 @@ private const val DETAIL_EDGE = 4096
 private const val PREVIEW_EDGE = 1800
 
 /**
- * Eén foto groot, met de acties erbij: bewaren, in Lightroom openen (RAW) en naar de prullenbak. Veeg om naar de
- * volgende te gaan, knijp of tik twee keer om in te zoomen. De lijst staat vast bij het openen; wat er daarna
+ * Eén foto groot, met de acties erbij: bewaren of niet bewaren (allebei gaan vanzelf door naar de volgende, om snel door een
+ * dag heen te kunnen), in Lightroom openen (RAW) en naar de prullenbak. Veeg om naar de volgende te gaan, knijp of tik twee keer om in te zoomen. De lijst staat vast bij het openen; wat er daarna
  * verandert (een vinkje, een verwijderde foto) komt uit [photos].
  */
 @Composable
@@ -84,6 +85,7 @@ fun ViewerScreen(
     startId: Long,
     photos: List<Photo>,
     onSelect: (Photo, Boolean) -> Unit,
+    onReject: (Photo) -> Unit,
     onTrash: (Photo) -> Unit,
     onClose: () -> Unit,
 ) {
@@ -130,13 +132,18 @@ fun ViewerScreen(
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            // Bewaren en niet bewaren zetten de keuze en gaan door naar de volgende. De laatste foto blijft staan.
+            fun next() { if (pager.currentPage < list.lastIndex) scope.launch { pager.animateScrollToPage(pager.currentPage + 1) } }
             // IntrinsicSize.Min: de prullenbak is precies zo hoog als de pillen ernaast, ook bij een ander lettertype.
             Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (current.selectable) {
-                    if (current.selected) PrimaryPillButton(stringResource(R.string.viewer_kept), { onSelect(current, false) }, Modifier.weight(1f), icon = KeeperIcons.Check)
-                    else SecondaryPillButton(stringResource(R.string.viewer_keep), { onSelect(current, true) }, Modifier.weight(1f), icon = KeeperIcons.Check)
+                    if (current.discarded) PrimaryPillButton(
+                        stringResource(R.string.viewer_discarded), { onReject(current); next() }, Modifier.weight(1f), icon = KeeperIcons.Close,
+                        container = MaterialTheme.colorScheme.errorContainer, content = MaterialTheme.colorScheme.onErrorContainer,
+                    ) else SecondaryPillButton(stringResource(R.string.viewer_discard), { onReject(current); next() }, Modifier.weight(1f), icon = KeeperIcons.Close)
+                    if (current.selected) PrimaryPillButton(stringResource(R.string.viewer_kept), { next() }, Modifier.weight(1f), icon = KeeperIcons.Check)
+                    else SecondaryPillButton(stringResource(R.string.viewer_keep), { onSelect(current, true); next() }, Modifier.weight(1f), icon = KeeperIcons.Check)
                 } else Box(Modifier.weight(1f))
-                if (current.item.isDng) SecondaryPillButton(stringResource(R.string.review_lightroom), { openInLightroom(scope, context, current, photos, defaultLook) }, icon = KeeperIcons.OpenInNew)
                 // Naar de prullenbak, na Android's eigen bevestiging; terug te zetten.
                 KeeperIconButton(
                     KeeperIcons.Delete, stringResource(R.string.review_trash), { onTrash(current) },
@@ -144,6 +151,7 @@ fun ViewerScreen(
                     size = 48, iconSize = 22, background = MaterialTheme.colorScheme.errorContainer, tint = MaterialTheme.colorScheme.onErrorContainer,
                 )
             }
+            if (current.item.isDng) SecondaryPillButton(stringResource(R.string.review_lightroom), { openInLightroom(scope, context, current, photos, defaultLook) }, Modifier.fillMaxWidth(), icon = KeeperIcons.OpenInNew)
         }
     }
 }

@@ -27,9 +27,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val snapshot = MutableStateFlow<Snapshot?>(null)
 
     /** De keuzes van Mark liggen los van de scan: een veeg of een knop rekent alleen opnieuw, scant niet opnieuw. */
-    val state: StateFlow<UiState> = combine(snapshot, graph.prefs.skipped, graph.prefs.cameraVersion, graph.prefs.quality) { snap, skipped, kept, quality ->
+    val state: StateFlow<UiState> = combine(snapshot, graph.prefs.skipped, graph.prefs.cameraVersion, graph.prefs.quality, graph.prefs.rejected) { snap, skipped, kept, quality, rejected ->
         if (snap == null) UiState() else {
-            val photos = Classifier.classify(snap.items, snap.probes, skipped, kept, snap.doneNames, snap.lightroomFolder)
+            val photos = Classifier.classify(snap.items, snap.probes, skipped, kept, snap.doneNames, snap.lightroomFolder, rejected)
             UiState(false, photos, Classifier.summarize(photos, JpegQuality.bitsPerPixel(quality)), snap.sinceMs)
         }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, UiState())
@@ -44,6 +44,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (targets.isEmpty()) return
         val (exclude, keep) = targets.partition { it.defaultsOn }
         viewModelScope.launch { graph.prefs.setSelection(keep.map { it.item.name }, exclude.map { it.item.name }, on) }
+    }
+
+    /** Bewust niet bewaren: uit de selectie en met een kruisje. */
+    fun reject(photos: List<Photo>) {
+        val targets = photos.filter { it.selectable }
+        if (targets.isEmpty()) return
+        val (exclude, keep) = targets.partition { it.defaultsOn }
+        viewModelScope.launch { graph.prefs.reject(keep.map { it.item.name }, exclude.map { it.item.name }) }
     }
 
     fun toggle(photo: Photo) = select(listOf(photo), !photo.selected)

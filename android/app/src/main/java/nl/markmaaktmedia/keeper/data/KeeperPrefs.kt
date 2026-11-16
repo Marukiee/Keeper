@@ -24,6 +24,7 @@ class KeeperPrefs(private val context: Context) {
         val dismissed = stringPreferencesKey("dismissed_update")
         val skipped = stringSetPreferencesKey("skipped")
         val cameraVersion = stringSetPreferencesKey("camera_version")
+        val rejected = stringSetPreferencesKey("rejected")
         val since = longPreferencesKey("since_ms")
         val outputFolder = stringPreferencesKey("output_folder")
         val lightroomFolder = stringPreferencesKey("lightroom_folder")
@@ -71,8 +72,21 @@ class KeeperPrefs(private val context: Context) {
     suspend fun setSelection(keep: List<String>, exclude: List<String>, on: Boolean) = edit {
         val kept = it[K.cameraVersion] ?: emptySet()
         val skipped = it[K.skipped] ?: emptySet()
+        // Wie weer bewaard wordt, is niet langer weggedaan.
+        if (on) it[K.rejected] = (it[K.rejected] ?: emptySet()) - keep.toSet() - exclude.toSet()
         it[K.cameraVersion] = if (on) kept + keep else kept - keep.toSet()
         it[K.skipped] = if (on) skipped - exclude.toSet() else skipped + exclude
+    }
+
+    /**
+     * Bewust niet bewaren (de kruisknop in Bekijken): gaat niet mee en krijgt een kruisje, om te zien dat je er al naar gekeken hebt.
+     * Het verschil met gewoon uitgezet is alleen het kruisje; Opruimen verandert er niet van.
+     */
+    val rejected: Flow<Set<String>> = data.map { it[K.rejected] ?: emptySet() }
+    suspend fun reject(keep: List<String>, exclude: List<String>) = edit {
+        it[K.cameraVersion] = (it[K.cameraVersion] ?: emptySet()) - keep.toSet()
+        it[K.skipped] = (it[K.skipped] ?: emptySet()) + exclude
+        it[K.rejected] = (it[K.rejected] ?: emptySet()) + keep + exclude
     }
 
     /** JPEG-kwaliteit voor het omzetten (jpegli). Fase 0: q94 zit tussen q93 en q95 in. */
