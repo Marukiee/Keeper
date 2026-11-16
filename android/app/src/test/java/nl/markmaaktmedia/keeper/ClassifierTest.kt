@@ -1,6 +1,7 @@
 package nl.markmaaktmedia.keeper
 
 import nl.markmaaktmedia.keeper.scan.Classifier
+import nl.markmaaktmedia.keeper.scan.Edit
 import nl.markmaaktmedia.keeper.scan.MediaItem
 import nl.markmaaktmedia.keeper.scan.Probe
 import nl.markmaaktmedia.keeper.scan.Status
@@ -43,13 +44,34 @@ class ClassifierTest {
 
     @Test fun rawWithLightroomExportIsSkippedAndExportGoesAsIs() {
         val raw = item("IMG20261114120548.dng"); val export = item("IMG20261114120548.jpg", path = "Pictures/AdobeLightroom/")
-        val r = run(listOf(raw, export))
+        val r = run(listOf(raw, export), keepAll = false)
         assertEquals(Status.RawEdited, r[raw.name]); assertEquals(Status.LightroomExport, r[export.name])
+    }
+
+    @Test fun keepingAnEditedOriginalWinsOverTheEdit() {
+        val raw = item("IMG20261114120548.dng"); val export = item("IMG20261114120548.jpg", path = "Pictures/AdobeLightroom/")
+        val photos = Classifier.classify(listOf(raw, export), emptyMap(), emptySet(), setOf(raw.name), emptySet(), "Pictures/AdobeLightroom/")
+        val p = photos.first { it.item.id == raw.id }
+        // Bewaard: de camera-versie gaat mee, en de tegel blijft laten zien dat er een bewerking bestaat.
+        assertEquals(Status.CameraVersion, p.status); assertEquals(Edit.Exported, p.edit)
+        assertEquals(true, p.selectable)
+        assertEquals(Edit.None, photos.first { it.item.id == export.id }.edit)
+    }
+
+    @Test fun editedOriginalsCanBePickedButDoNotGoAlong() {
+        val raw = item("IMG1.dng"); val export = item("IMG1.jpg", path = "Pictures/AdobeLightroom/")
+        val original = item("IMG20261114120713.jpg", taken = 555); val edit = item("IMG_20261114_220000.jpg", taken = 555)
+        val photos = Classifier.classify(listOf(raw, export, original, edit), emptyMap(), emptySet(), emptySet(), emptySet(), "Pictures/AdobeLightroom/")
+        for (name in listOf(raw.name, original.name)) {
+            val p = photos.first { it.item.name == name }
+            assertEquals(true, p.selectable); assertEquals(false, p.goesAlong); assertEquals(false, p.cleanable)
+        }
+        assertEquals(Edit.Replaced, photos.first { it.item.id == original.id }.edit)
     }
 
     @Test fun galleryEditReplacesTheOriginalByCaptureTime() {
         val original = item("IMG20261114120713.jpg", taken = 555); val edit = item("IMG_20261114_220000.jpg", taken = 555)
-        val r = run(listOf(original, edit))
+        val r = run(listOf(original, edit), keepAll = false)
         assertEquals(Status.OriginalReplaced, r[original.name]); assertEquals(Status.GalleryEdit, r[edit.name])
     }
 

@@ -34,24 +34,34 @@ object Classifier {
 
         return live.mapNotNull { item ->
             val hdr = probes[item.id]?.hasGainMap == true
+            val isOriginal = item.name.lowercase() !in done && !inLightroom(item) && !isGalleryEdit(item.name)
+            // Is er van dit origineel een bewerking? Een Lightroom-export met dezelfde naam, of een Galerij-kopie met dezelfde opnametijd.
+            val edit = when {
+                !isOriginal -> Edit.None
+                item.isDng && item.baseName in exportedBases -> Edit.Exported
+                item.isJpeg && item.dateTakenMs > 0 && item.dateTakenMs in editedTimes -> Edit.Replaced
+                item.isJpeg && item.baseName in exportedBases -> Edit.Exported
+                else -> Edit.None
+            }
             val status = when {
                 item.name.lowercase() in done -> Status.Done
                 item.name in skipped && (inLightroom(item) || isGalleryEdit(item.name)) -> Status.Skipped
                 inLightroom(item) -> Status.LightroomExport
                 isGalleryEdit(item.name) -> Status.GalleryEdit
+                // Bewaren is een bewuste keuze en wint van "er bestaat een bewerking": dan gaat ook de camera-versie mee.
                 item.isDng -> when {
-                    item.baseName in exportedBases -> Status.RawEdited
                     item.name in kept -> Status.CameraVersion
+                    edit != Edit.None -> Status.RawEdited
                     else -> Status.NeedsEdit
                 }
-                item.isJpeg && item.dateTakenMs > 0 && item.dateTakenMs in editedTimes -> Status.OriginalReplaced
-                item.isJpeg && item.baseName in exportedBases -> Status.OriginalExported
-                // Bewaren is een bewuste keuze; zonder keuze gaat een camera-JPG niet mee.
-                item.isJpeg && item.name !in kept -> Status.NotKept
-                item.isJpeg -> if (hdr) Status.Convert else Status.AsIs
+                item.isJpeg && item.name in kept -> if (hdr) Status.Convert else Status.AsIs
+                edit == Edit.Replaced -> Status.OriginalReplaced
+                edit == Edit.Exported -> Status.OriginalExported
+                // Zonder keuze gaat een camera-JPG niet mee.
+                item.isJpeg -> Status.NotKept
                 else -> return@mapNotNull null
             }
-            Photo(item, status, hdr, item.name in rejected)
+            Photo(item, status, hdr, item.name in rejected, edit)
         }.sortedByDescending { it.item.dateTakenMs.takeIf { t -> t > 0 } ?: it.item.dateAddedMs }
     }
 

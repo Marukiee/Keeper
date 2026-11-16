@@ -50,7 +50,13 @@ enum class Status {
     Done,
 }
 
-data class Photo(val item: MediaItem, val status: Status, val hdr: Boolean, val rejected: Boolean = false) {
+/**
+ * Bestaat er een bewerking van dit bestand? Los van [Status]: ook een bewaarde foto (die dus meegaat) blijft "bewerkt" heten,
+ * zodat de tegel laat zien dat er ook een Lightroom-export of Galerij-kopie van is.
+ */
+enum class Edit { None, Exported, Replaced }
+
+data class Photo(val item: MediaItem, val status: Status, val hdr: Boolean, val rejected: Boolean = false, val edit: Edit = Edit.None) {
     /** Gaat mee naar de uitvoermap. */
     val goesAlong get() = status in ALONG
     /** Moet door de HDR-naar-SDR-conversie. */
@@ -59,6 +65,8 @@ data class Photo(val item: MediaItem, val status: Status, val hdr: Boolean, val 
     val selectable get() = status in SELECTABLE
     /** Aan betekent: gaat mee. Dat is het vinkje in de galerij. */
     val selected get() = goesAlong
+    /** Bewaard: gaat mee. Hetzelfde als [selected], maar zonder de verwarring met de selectie in de galerij. */
+    val kept get() = goesAlong
     /** Bewust niet bewaard (kruisknop): krijgt een kruisje in de galerij. */
     val discarded get() = rejected && selectable && !goesAlong
     /**
@@ -73,7 +81,8 @@ data class Photo(val item: MediaItem, val status: Status, val hdr: Boolean, val 
 
     companion object {
         private val ALONG = setOf(Status.Convert, Status.AsIs, Status.LightroomExport, Status.GalleryEdit, Status.CameraVersion)
-        private val SELECTABLE = ALONG + Status.NeedsEdit + Status.Skipped + Status.NotKept
+        /** Alles behalve wat al klaar is. Ook een RAW of JPG mét bewerking is te kiezen: bewaren (de camera-versie gaat dan ook mee), niet bewaren of weggooien. */
+        private val SELECTABLE = ALONG + Status.NeedsEdit + Status.Skipped + Status.NotKept + Status.RawEdited + Status.OriginalReplaced + Status.OriginalExported
     }
 }
 

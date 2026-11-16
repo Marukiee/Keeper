@@ -10,6 +10,8 @@ import android.provider.MediaStore
 import nl.markmaaktmedia.keeper.scan.MediaScanner
 import nl.markmaaktmedia.keeper.scan.Photo
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -96,21 +98,22 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
     val padding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 112.dp)
 
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding()) {
+        // De galerij blijft onder de viewer staan (de viewer ligt er als laag overheen), zodat je hem tijdens het naar beneden
+        // slepen langzaam terug ziet komen, en op dezelfde plek van de lijst staat als je terugkomt.
         AnimatedContent(
-            targetState = sub to tab,
+            targetState = (if (sub == Sub.Viewer) Sub.None else sub) to tab,
             transitionSpec = { (slideInVertically { it / 12 } + fadeIn()) togetherWith fadeOut() },
             label = "screen",
         ) { (currentSub, currentTab) ->
             when (currentSub) {
-                Sub.Viewer -> viewer?.let { request ->
-                    ViewerScreen(request.ids, request.startId, state.photos, { photo, on -> vm.select(listOf(photo), on) }, { photo -> vm.reject(listOf(photo)) }, { photo -> trash(listOf(photo)) }, { sub = Sub.None })
-                }
+                Sub.Viewer -> Unit
                 Sub.Overview -> TodayScreen(state, permitted, { ask.launch(Manifest.permission.READ_MEDIA_IMAGES) }, { tab = 1; sub = Sub.None }, { sub = Sub.None }, padding)
                 Sub.Updates -> UpdatesScreen({ sub = Sub.None }, padding)
                 Sub.None -> when (currentTab) {
                     0 -> GalleryScreen(
                         state, GalleryFilter.entries[filter], { filter = it.ordinal }, permitted, { ask.launch(Manifest.permission.READ_MEDIA_IMAGES) },
-                        { photos, on -> vm.select(photos, on) },
+                        { photos -> vm.select(photos, true) },
+                        { photos -> vm.reject(photos) },
                         { photo, shown -> viewer = ViewerRequest(shown.map { it.item.id }, photo.item.id); sub = Sub.Viewer },
                         { sub = Sub.Overview },
                         trash,
@@ -120,14 +123,22 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
                 }
             }
         }
-        if (sub != Sub.Viewer) {
-            PillNavigationBar(
-                items = items,
-                selectedIndex = tab,
-                onSelect = { tab = it; sub = Sub.None },
-                // Zoals in Tandem: 20 dp van de zijkanten, niet tot de rand.
-                modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(horizontal = 20.dp, vertical = 12.dp),
-            )
+        PillNavigationBar(
+            items = items,
+            selectedIndex = tab,
+            onSelect = { tab = it; sub = Sub.None },
+            // Zoals in Tandem: 20 dp van de zijkanten, niet tot de rand.
+            modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(horizontal = 20.dp, vertical = 12.dp),
+        )
+        // Boven alles, ook boven de navigatiebalk. De achtergrond van de viewer wordt doorzichtig bij het slepen.
+        AnimatedVisibility(
+            visible = sub == Sub.Viewer,
+            enter = slideInVertically { it / 12 } + fadeIn(),
+            exit = fadeOut(tween(220)),
+        ) {
+            viewer?.let { request ->
+                ViewerScreen(request.ids, request.startId, state.photos, { photo, on -> vm.select(listOf(photo), on) }, { photo -> vm.reject(listOf(photo)) }, { photo -> trash(listOf(photo)) }, { sub = Sub.None })
+            }
         }
     }
 }

@@ -4,6 +4,9 @@ import android.os.SystemClock
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
+import androidx.compose.animation.Crossfade
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
@@ -60,6 +63,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import nl.markmaaktmedia.keeper.R
 import nl.markmaaktmedia.keeper.UiState
+import nl.markmaaktmedia.keeper.scan.Edit
 import nl.markmaaktmedia.keeper.scan.Photo
 import nl.markmaaktmedia.keeper.scan.Status
 import nl.markmaaktmedia.keeper.ui.components.KeeperDialog
@@ -86,13 +90,17 @@ enum class GalleryFilter(@StringRes val label: Int) {
     fun matches(p: Photo) = when (this) {
         All -> true
         Favorites -> p.item.isFavorite
-        Selected -> p.selected
+        Selected -> p.kept
         Raw -> p.item.isDng
     }
 }
 
 // Een leeg scherm staat optisch iets boven het midden, en niet achter de selectiebalk en navigatiebalk onderaan.
 private val EMPTY_LIFT = 240.dp
+
+/** Bewaard en niet bewaard hebben eigen kleuren en staan rechtsonder, zodat ze nooit op de selectie lijken (blauw, linksboven). */
+private val KeptGreen = Color(0xFF2E9E57)
+private val RejectedRed = Color(0xFFD64545)
 
 private sealed interface Entry {
     data class Header(val day: LocalDate, val photos: List<Photo>) : Entry
@@ -104,9 +112,13 @@ private val zone: ZoneId get() = ZoneId.systemDefault()
 internal fun dayFormat() = DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.getDefault())
 
 /**
- * De startpagina: een galerij van wat er nieuw is. Tik op een foto om hem groot te bekijken en in te zoomen. Houd ingedrukt
- * (en sleep) om te selecteren: dan verschijnen de rondjes en zet een tik een foto aan of uit. Aan betekent: gaat mee.
- * Zonder selectiemodus zijn er geen rondjes, de galerij is dan gewoon om te kijken.
+ * De startpagina: een galerij van wat er nieuw is, met twee gescheiden dingen.
+ *
+ * - Een beslissing per foto: bewaard (groen vinkje rechtsonder), niet bewaard (rood kruisje rechtsonder) of nog niet bekeken (niets).
+ *   Die blijft staan en bepaalt wat er meegaat.
+ * - Een selectie: tijdelijk, om meerdere foto's tegelijk iets te laten doen. Houd een foto ingedrukt (en sleep over een reeks), dan
+ *   krijgen de gekozen foto's links boven een blauw vinkje en verkleinen ze. Vanuit de balk onderaan bewaar je ze allemaal, doe je
+ *   ze allemaal weg of stuur je ze naar de prullenbak. Een selectie begint elke keer leeg en verandert zelf niets.
  */
 @Composable
 fun GalleryScreen(
@@ -115,16 +127,28 @@ fun GalleryScreen(
     onFilter: (GalleryFilter) -> Unit,
     hasPermission: Boolean,
     onRequestPermission: () -> Unit,
-    onSelect: (List<Photo>, Boolean) -> Unit,
+    onKeep: (List<Photo>) -> Unit,
+    onReject: (List<Photo>) -> Unit,
     onOpen: (Photo, List<Photo>) -> Unit,
     onOverview: () -> Unit,
     onTrashMany: (List<Photo>) -> Unit,
 ) {
     // Opruimen: welke dag en welke foto's van die dag. Pas na een bevestiging gaat er iets naar de prullenbak.
     var cleanup by remember { mutableStateOf<Pair<String, List<Photo>>?>(null) }
-    // Selectiemodus: begint met een lange druk. Terug sluit hem en houdt wat je gekozen hebt; het kruisje zet alles uit en sluit hem.
+    // De selectie. Leeg zodra je de modus verlaat, en de modus eindigt vanzelf als je de laatste foto uitzet.
     var selecting by remember { mutableStateOf(false) }
-    BackHandler(enabled = selecting) { selecting = false }
+    var picked by remember { mutableStateOf<Set<Long>>(emptySet()) }
+    val byId = remember(state.photos) { state.photos.associateBy { it.item.id } }
+    val pickedPhotos = remember(picked, byId) { picked.mapNotNull { byId[it] }.filter { it.selectable } }
+    fun setPicked(photos: List<Photo>, on: Boolean) {
+        val ids = photos.filter { it.selectable }.map { it.item.id }
+        picked = if (on) picked + ids else picked - ids.toSet()
+    }
+    // Een tik of dagrondje: zet aan of uit en sluit de modus als er niets meer gekozen is.
+    fun pick(photos: List<Photo>, on: Boolean) { setPicked(photos, on); if (picked.isEmpty()) selecting = false }
+    fun endSelecting() { picked = emptySet(); selecting = false }
+    BackHandler(enabled = selecting) { endSelecting() }
+
     val shown = remember(state.photos, filter) { state.photos.filter(filter::matches) }
     val today = remember { LocalDate.now(zone) }
     val todayLabel = stringResource(R.string.day_today)
@@ -137,6 +161,10 @@ fun GalleryScreen(
         }
     }
     val labels = GalleryFilter.entries.associateWith { stringResource(it.label) }
+    // Alleen wat Mark zelf beoordeelt: camera-JPG's en RAW's, niet de Lightroom-exports.
+    val reviewable = state.photos.filter { it.selectable && !it.defaultsOn }
+    val toReview = reviewable.count { !it.kept && !it.discarded }
+    val notKept = reviewable.count { it.discarded }
     cleanup?.let { (day, photos) ->
         CleanupDialog(day, photos, { remove -> cleanup = null; onTrashMany(remove) }, { cleanup = null })
     }
@@ -146,7 +174,7 @@ fun GalleryScreen(
             UpdateBanner(Modifier.padding(top = 8.dp))
             ScreenHeader(
                 stringResource(R.string.gallery_title),
-                if (hasPermission && state.sinceMs > 0) stringResource(R.string.gallery_sub, state.photos.size, formatDay(state.sinceMs)) else null,
+                if (hasPermission && state.photos.isNotEmpty()) stringResource(R.string.gallery_counts, toReview, state.summary.goingCount, notKept) else null,
             )
             if (hasPermission && state.photos.isNotEmpty()) {
                 SegmentedPillRow(GalleryFilter.entries, filter, { labels.getValue(it) }, onFilter, Modifier.padding(top = 4.dp, bottom = 12.dp), equalWidth = true)
@@ -172,18 +200,23 @@ fun GalleryScreen(
                         icon = if (favorites) KeeperIcons.Favorite else KeeperIcons.Image,
                     )
                 }
-                else -> PhotoGrid(entries, shown, todayLabel, yesterdayLabel, today, selecting, {
-        selecting = true
-    }, onSelect, onOpen) { label, photos -> cleanup = label to photos }
+                else -> PhotoGrid(
+                    entries, shown, todayLabel, yesterdayLabel, today, selecting, picked,
+                    isPicked = { it in picked },
+                    onStartSelecting = { selecting = true },
+                    onSetPicked = ::setPicked,
+                    onPick = ::pick,
+                    onSelectionEnd = { if (picked.isEmpty()) selecting = false },
+                    onOpen = onOpen,
+                ) { label, photos -> cleanup = label to photos }
             }
             if (hasPermission && state.photos.isNotEmpty()) {
-                SelectionBar(
-                    state, selecting, onOverview,
-                    onCancel = {
-                        // Het kruisje deselecteert alles, zoals in Google Foto's: de volgende selectie begint leeg.
-                        onSelect(state.photos.filter { it.selectable && it.selected }, false)
-                        selecting = false
-                    },
+                BottomBar(
+                    state, selecting, pickedPhotos, onOverview,
+                    onClear = ::endSelecting,
+                    onKeep = { onKeep(pickedPhotos); endSelecting() },
+                    onReject = { onReject(pickedPhotos); endSelecting() },
+                    onTrash = { onTrashMany(pickedPhotos); endSelecting() },
                     modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(start = 20.dp, end = 20.dp, bottom = 90.dp),
                 )
             }
@@ -233,8 +266,12 @@ private fun PhotoGrid(
     yesterdayLabel: String,
     today: LocalDate,
     selecting: Boolean,
+    picked: Set<Long>,
+    isPicked: (Long) -> Boolean,
     onStartSelecting: () -> Unit,
-    onSelect: (List<Photo>, Boolean) -> Unit,
+    onSetPicked: (List<Photo>, Boolean) -> Unit,
+    onPick: (List<Photo>, Boolean) -> Unit,
+    onSelectionEnd: () -> Unit,
     onOpen: (Photo, List<Photo>) -> Unit,
     onCleanup: (String, List<Photo>) -> Unit,
 ) {
@@ -244,8 +281,10 @@ private fun PhotoGrid(
     val byId by rememberUpdatedState(remember(shown) { shown.associateBy { it.item.id } })
     val order by rememberUpdatedState(shown)
     val indexOf by rememberUpdatedState(remember(shown) { shown.withIndex().associate { it.value.item.id to it.index } })
-    val select by rememberUpdatedState(onSelect)
+    val setPicked by rememberUpdatedState(onSetPicked)
+    val pickedNow by rememberUpdatedState(isPicked)
     val startSelecting by rememberUpdatedState(onStartSelecting)
+    val selectionEnd by rememberUpdatedState(onSelectionEnd)
     // Een lange druk eindigt ook in een tik; die mag de foto niet openen. De volgorde waarin tik en slepen klaar zijn
     // is niet vast, dus tellen we de tijd sinds het laatste lange-druk-moment.
     val lastLongPress = remember { longArrayOf(0L) }
@@ -260,7 +299,7 @@ private fun PhotoGrid(
             // Ingedrukt houden en slepen, zoals in Google Foto's: de foto waar je begint is het anker, en alles in leesvolgorde tussen
             // het anker en waar je vinger nu is wordt aan of uit gezet (de eerste foto bepaalt welk van de twee). Schuif je terug,
             // dan krimpt de reeks en krijgen de foto's die er niet meer in zitten hun oude stand terug.
-            // De sleutel is Unit: een nieuwe fotolijst (na de eerste selectie) mag het lopende gebaar niet afbreken, de lijst wordt bijgewerkt gelezen.
+            // De sleutel is Unit: een nieuwe fotolijst mag het lopende gebaar niet afbreken, de lijst wordt bijgewerkt gelezen.
             // Dit gebaar kijkt in de Initial-fase, vóór het raster zelf: anders pakt het raster de sleepbeweging op om te scrollen.
             var mode: Boolean? = null
             var anchor = -1
@@ -284,14 +323,14 @@ private fun PhotoGrid(
                 lastIndex = j
                 if (anchor < 0) anchor = j
                 val inRange = order.subList(minOf(anchor, j), maxOf(anchor, j) + 1).filter { it.selectable }
-                val on = mode ?: inRange.firstOrNull()?.let { !it.selected } ?: return
+                val on = mode ?: inRange.firstOrNull()?.let { !pickedNow(it.item.id) } ?: return
                 mode = on
                 val ids = inRange.mapTo(HashSet()) { it.item.id }
                 val add = inRange.filter { it.item.id !in touched }
-                add.forEach { original.getOrPut(it.item.id) { it.selected } }
-                if (add.isNotEmpty()) select(add, on)
+                add.forEach { original.getOrPut(it.item.id) { pickedNow(it.item.id) } }
+                if (add.isNotEmpty()) setPicked(add, on)
                 val drop = touched.filter { it !in ids }.mapNotNull { byId[it] }
-                for ((was, group) in drop.groupBy { original.getValue(it.item.id) }) select(group, was)
+                for ((was, group) in drop.groupBy { original.getValue(it.item.id) }) setPicked(group, was)
                 touched = ids
             }
             val slop = viewConfiguration.touchSlop
@@ -342,6 +381,7 @@ private fun PhotoGrid(
                 } finally {
                     scroller.cancel()
                     reset(); lastLongPress[0] = SystemClock.uptimeMillis()
+                    selectionEnd()
                 }
             }
         },
@@ -350,14 +390,18 @@ private fun PhotoGrid(
             when (entry) {
                 is Entry.Header -> {
                     val label = dayLabel(entry.day, today, todayLabel, yesterdayLabel)
-                    DayHeader(label, entry.photos, selecting, onSelect) { onCleanup(label, entry.photos) }
+                    DayHeader(label, entry.photos, selecting, isPicked, onPick) { onCleanup(label, entry.photos) }
                 }
-                is Entry.Cell -> Tile(entry.photo, selecting, { onSelect(listOf(entry.photo), !entry.photo.selected) }, {
-                    // Een tik na een lange druk telt niet. In selectiemodus zet een tik de foto aan of uit, anders opent hij groot.
-                    if (SystemClock.uptimeMillis() - lastLongPress[0] > 500L) {
-                        if (selecting && entry.photo.selectable) onSelect(listOf(entry.photo), !entry.photo.selected) else if (!selecting) onOpen(entry.photo, shown)
-                    }
-                })
+                is Entry.Cell -> {
+                    val photo = entry.photo
+                    val isOn = photo.item.id in picked
+                    Tile(photo, selecting, isOn, { onPick(listOf(photo), !isOn) }, {
+                        // Een tik na een lange druk telt niet. In selectiemodus zet een tik de foto aan of uit, anders opent hij groot.
+                        if (SystemClock.uptimeMillis() - lastLongPress[0] > 500L) {
+                            if (selecting) { if (photo.selectable) onPick(listOf(photo), !isOn) } else onOpen(photo, shown)
+                        }
+                    })
+                }
             }
         }
     }
@@ -369,15 +413,18 @@ internal fun dayLabel(day: LocalDate, today: LocalDate, todayLabel: String, yest
     else -> day.format(dayFormat())
 }
 
-/** De dag, met rechts één rondje dat alle foto's van die dag tegelijk aan of uit zet. */
+/** De dag, met rechts één rondje dat alle foto's van die dag tegelijk selecteert. */
 @Composable
-private fun DayHeader(label: String, photos: List<Photo>, selecting: Boolean, onSelect: (List<Photo>, Boolean) -> Unit, onCleanup: () -> Unit) {
+private fun DayHeader(
+    label: String, photos: List<Photo>, selecting: Boolean, isPicked: (Long) -> Boolean,
+    onPick: (List<Photo>, Boolean) -> Unit, onCleanup: () -> Unit,
+) {
     val selectable = photos.filter { it.selectable }
-    val all = selectable.isNotEmpty() && selectable.all { it.selected }
+    val all = selectable.isNotEmpty() && selectable.all { isPicked(it.item.id) }
     val cleanable = photos.count { it.cleanable }
     Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(label, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-        if (cleanable > 0) {
+        if (cleanable > 0 && !selecting) {
             Row(
                 Modifier.clip(PillShape).bouncyClickable(onClick = onCleanup).padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -386,7 +433,7 @@ private fun DayHeader(label: String, photos: List<Photo>, selecting: Boolean, on
                 Text(stringResource(R.string.cleanup_button, cleanable), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.error)
             }
         }
-        if (selecting && selectable.isNotEmpty()) SelectCircle(all, { onSelect(selectable, !all) })
+        if (selecting && selectable.isNotEmpty()) SelectCircle(all, { onPick(selectable, !all) })
     }
 }
 
@@ -404,90 +451,114 @@ private fun SelectCircle(selected: Boolean, onClick: () -> Unit, modifier: Modif
     }
 }
 
-/** Vinkje (bewaard) of kruisje (niet bewaard) op een tegel, ook als je niet aan het selecteren bent. */
+/** Rechtsonder: groen vinkje voor bewaard, rood kruisje voor bewust niet bewaard. Nooit blauw en nooit linksboven, dat is de selectie. */
 @Composable
 private fun DecisionBadge(kept: Boolean, modifier: Modifier = Modifier) {
-    val scheme = MaterialTheme.colorScheme
-    Box(
-        modifier.size(24.dp).clip(CircleShape).background(if (kept) scheme.primary else scheme.errorContainer),
-        contentAlignment = Alignment.Center,
-    ) {
+    Box(modifier.size(24.dp).clip(CircleShape).background(if (kept) KeptGreen else RejectedRed), contentAlignment = Alignment.Center) {
         Icon(
             if (kept) KeeperIcons.Check else KeeperIcons.Close, stringResource(if (kept) R.string.tile_kept else R.string.tile_discarded),
-            tint = if (kept) scheme.onPrimary else scheme.onErrorContainer, modifier = Modifier.size(16.dp),
+            tint = Color.White, modifier = Modifier.size(16.dp),
         )
     }
 }
 
 @Composable
-private fun Tile(photo: Photo, selecting: Boolean, onToggle: () -> Unit, onOpen: () -> Unit) {
-    val selected = photo.selected
-    val scale by animateFloatAsState(if (selected) 0.88f else 1f, KeeperMotion.bouncy(), label = "tileScale")
-    val corner by animateDpAsState(if (selected) 18.dp else 8.dp, KeeperMotion.bouncy(), label = "tileCorner")
+private fun Tile(photo: Photo, selecting: Boolean, picked: Boolean, onToggle: () -> Unit, onOpen: () -> Unit) {
+    // Alleen een gekozen foto (selectie) wordt kleiner met ronde hoeken. Bewaard of niet bewaard verandert de tegel zelf niet.
+    val scale by animateFloatAsState(if (picked) 0.88f else 1f, KeeperMotion.bouncy(), label = "tileScale")
+    val corner by animateDpAsState(if (picked) 18.dp else 8.dp, KeeperMotion.bouncy(), label = "tileCorner")
     val dim = if (photo.selectable) 1f else 0.45f
+    // "Bewerkt" gaat voor "RAW": een RAW met een Lightroom-export laat zien dat er een bewerking bestaat, ook als hij zelf meegaat.
     val badge = when {
         photo.status == Status.Done -> R.string.tile_done
-        photo.status == Status.RawEdited || photo.status == Status.OriginalExported -> R.string.tile_edited
-        photo.status == Status.OriginalReplaced -> R.string.tile_original
+        photo.edit == Edit.Exported -> R.string.tile_edited
+        photo.edit == Edit.Replaced -> R.string.tile_original
         photo.item.isDng -> R.string.tile_raw
         else -> null
     }
     Box(Modifier.aspectRatio(1f).bouncyClickable(role = Role.Image, onClick = onOpen)) {
-        PhotoThumb(
-            photo.item, 360,
-            Modifier.fillMaxSize().graphicsLayer { scaleX = scale; scaleY = scale; alpha = dim; shape = RoundedCornerShape(corner); clip = true },
-        )
-        if (selecting && photo.selectable) SelectCircle(selected, onToggle, Modifier.align(Alignment.TopStart))
-        // Buiten de selectiemodus: een vinkje bij wat bewaard is en een kruisje bij wat je bewust hebt weggedaan.
-        else if (photo.selectable && (selected || photo.discarded)) DecisionBadge(selected, Modifier.align(Alignment.TopStart).padding(8.dp))
-        if (photo.item.isFavorite) {
-            Box(Modifier.align(Alignment.TopEnd).padding(8.dp).size(24.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.32f)), contentAlignment = Alignment.Center) {
-                Icon(KeeperIcons.Favorite, null, tint = Color(0xFFFF8FA3), modifier = Modifier.size(14.dp))
+        // Foto, vinkje, hartje en labels staan in één laag die samen kleiner wordt, zodat ze op dezelfde plek op de foto blijven.
+        Box(Modifier.fillMaxSize().graphicsLayer { scaleX = scale; scaleY = scale }) {
+            PhotoThumb(photo.item, 360, Modifier.fillMaxSize().graphicsLayer { alpha = dim }.clip(RoundedCornerShape(corner)))
+            if (selecting && photo.selectable) SelectCircle(picked, onToggle, Modifier.align(Alignment.TopStart))
+            if (photo.item.isFavorite) {
+                Box(Modifier.align(Alignment.TopEnd).padding(8.dp).size(24.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.32f)), contentAlignment = Alignment.Center) {
+                    Icon(KeeperIcons.Favorite, null, tint = Color(0xFFFF8FA3), modifier = Modifier.size(14.dp))
+                }
             }
-        }
-        if (badge != null) {
-            Text(
-                stringResource(badge), style = MaterialTheme.typography.labelSmall, color = Color.White,
-                modifier = Modifier.align(Alignment.BottomStart).padding(8.dp).clip(PillShape).background(Color.Black.copy(alpha = 0.5f)).padding(horizontal = 7.dp, vertical = 2.dp),
-            )
+            if (badge != null) {
+                Text(
+                    stringResource(badge), style = MaterialTheme.typography.labelSmall, color = Color.White,
+                    modifier = Modifier.align(Alignment.BottomStart).padding(8.dp).clip(PillShape).background(Color.Black.copy(alpha = 0.5f)).padding(horizontal = 7.dp, vertical = 2.dp),
+                )
+            }
+            if (photo.selectable && (photo.kept || photo.discarded)) DecisionBadge(photo.kept, Modifier.align(Alignment.BottomEnd).padding(8.dp))
         }
     }
 }
 
 /**
- * Onderaan: hoeveel er bewaard is en wat dat scheelt, tik op de tekst voor het overzicht. Naast de hoofdknop staat in
- * selectiemodus het kruisje: dat deselecteert alles en sluit de modus.
+ * Onderaan, in twee standen. Zonder selectie: hoeveel er bewaard is en wat dat scheelt, tik voor het overzicht, en Convert.
+ * Met selectie: wat je met de gekozen foto's wilt doen. Bewaren en niet bewaren zijn beslissingen, de prullenbak vraagt eerst
+ * Android's bevestiging. Het kruisje wist alleen de selectie.
  */
 @Composable
-private fun SelectionBar(
+private fun BottomBar(
     state: UiState,
     selecting: Boolean,
+    picked: List<Photo>,
     onOverview: () -> Unit,
-    onCancel: () -> Unit,
+    onClear: () -> Unit,
+    onKeep: () -> Unit,
+    onReject: () -> Unit,
+    onTrash: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val s = state.summary
     Surface(modifier.fillMaxWidth(), shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh, tonalElevation = 3.dp) {
-        Row(Modifier.padding(start = 20.dp, end = 8.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            run {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        if (s.goingCount == 0) stringResource(R.string.gallery_none) else stringResource(R.string.gallery_selected, s.goingCount),
-                        style = MaterialTheme.typography.titleMedium, maxLines = 1,
-                        modifier = Modifier.bouncyClickable(onClick = onOverview),
-                    )
-                    if (s.goingCount > 0) Text(
-                        stringResource(R.string.today_sizes, formatBytes(s.currentBytes), formatBytes(s.expectedBytes)),
-                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
-                        modifier = Modifier.bouncyClickable(onClick = onOverview),
-                    )
+        Crossfade(selecting, label = "bottomBar") { isSelecting ->
+            if (isSelecting) {
+                val none = picked.isEmpty()
+                Column(Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp, bottom = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        KeeperIconButton(KeeperIcons.Close, stringResource(R.string.gallery_deselect_all), onClear, size = 44, iconSize = 20, background = MaterialTheme.colorScheme.surfaceContainerHighest)
+                        Text(
+                            if (none) stringResource(R.string.gallery_pick_hint) else stringResource(R.string.gallery_picked, picked.size),
+                            style = MaterialTheme.typography.titleMedium, maxLines = 1, modifier = Modifier.weight(1f).padding(start = 14.dp),
+                        )
+                        KeeperIconButton(KeeperIcons.Delete, stringResource(R.string.review_trash), onTrash, size = 44, iconSize = 20, enabled = !none, tint = MaterialTheme.colorScheme.error)
+                    }
+                    Row(Modifier.padding(horizontal = 4.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        PrimaryPillButton(
+                            stringResource(R.string.viewer_discard), onReject, Modifier.weight(1f), icon = KeeperIcons.Close, enabled = !none,
+                            container = MaterialTheme.colorScheme.surfaceContainerHighest, content = MaterialTheme.colorScheme.onSurface,
+                        )
+                        PrimaryPillButton(
+                            stringResource(R.string.viewer_keep), onKeep, Modifier.weight(1f), icon = KeeperIcons.Check, enabled = !none,
+                            container = KeptGreen, content = Color.White,
+                        )
+                    }
                 }
-                if (selecting) KeeperIconButton(KeeperIcons.Close, stringResource(R.string.gallery_deselect_all), onCancel, size = 44, iconSize = 20, background = MaterialTheme.colorScheme.surfaceContainerHighest)
-                PrimaryPillButton(stringResource(R.string.gallery_prepare), {
-                    // Fase 1 leest alleen; het omzetten volgt na Mark's OK voor fase 2.
-                    Toast.makeText(context, R.string.gallery_prepare_soon, Toast.LENGTH_SHORT).show()
-                })
+            } else {
+                Row(Modifier.padding(start = 20.dp, end = 8.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            if (s.goingCount == 0) stringResource(R.string.gallery_none) else stringResource(R.string.gallery_selected, s.goingCount),
+                            style = MaterialTheme.typography.titleMedium, maxLines = 1,
+                            modifier = Modifier.bouncyClickable(onClick = onOverview),
+                        )
+                        if (s.goingCount > 0) Text(
+                            stringResource(R.string.today_sizes, formatBytes(s.currentBytes), formatBytes(s.expectedBytes)),
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
+                            modifier = Modifier.bouncyClickable(onClick = onOverview),
+                        )
+                    }
+                    PrimaryPillButton(stringResource(R.string.gallery_prepare), {
+                        // Fase 1 leest alleen; het omzetten volgt na Mark's OK voor fase 2.
+                        Toast.makeText(context, R.string.gallery_prepare_soon, Toast.LENGTH_SHORT).show()
+                    })
+                }
             }
         }
     }

@@ -87,6 +87,9 @@
     <string name="gallery_cleared">Selection cleared</string>
     <string name="gallery_undo">Undo</string>
     <string name="gallery_none">Nothing kept yet</string>
+    <string name="gallery_counts">%1$d to review · %2$d kept · %3$d not kept</string>
+    <string name="gallery_picked">%1$d selected</string>
+    <string name="gallery_pick_hint">Select photos</string>
     <string name="gallery_prepare">Convert</string>
     <string name="gallery_prepare_soon">Converting comes in the next version</string>
     <string name="gallery_no_favorites_title">No favorites</string>

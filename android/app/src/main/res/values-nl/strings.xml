@@ -85,6 +85,9 @@
     <string name="gallery_cleared">Selectie gewist</string>
     <string name="gallery_undo">Ongedaan maken</string>
     <string name="gallery_none">Nog niets bewaard</string>
+    <string name="gallery_counts">%1$d te bekijken · %2$d bewaard · %3$d niet bewaard</string>
+    <string name="gallery_picked">%1$d geselecteerd</string>
+    <string name="gallery_pick_hint">Selecteer foto\'s</string>
     <string name="gallery_prepare">Omzetten</string>
     <string name="gallery_prepare_soon">Het omzetten komt in de volgende versie</string>
     <string name="gallery_no_favorites_title">Geen favorieten</string>

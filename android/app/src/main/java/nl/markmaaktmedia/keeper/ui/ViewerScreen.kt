@@ -8,6 +8,18 @@ import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.VectorConverter
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.ui.unit.Velocity
+import kotlin.math.abs
+import kotlinx.coroutines.Job
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -42,6 +54,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
@@ -73,6 +86,15 @@ private const val MAX_ZOOM = 8f
 private const val DETAIL_EDGE = 4096
 /** Het beeld dat je ziet zonder in te zoomen. */
 private const val PREVIEW_EDGE = 1800
+/** Naar beneden slepen: over welk deel van de hoogte alles wegvalt (kleiner en vervagend), vanaf welk deel loslaten sluit, en hoe snel gooien ook sluit (px/s). */
+private const val DISMISS_RANGE = 0.35f
+private const val CLOSE_AT = 0.15f
+private const val CLOSE_VELOCITY = 1800f
+private const val BARS_FADE = 5f
+/** De achtergrond vervaagt 1,8 keer zo snel als de foto verdwijnt, zodat je de galerij al vroeg terugziet. */
+private const val BACKDROP_FADE = 1.8f
+/** Zo klein is de foto als hij helemaal is weggesleept. */
+private const val MIN_DRAG_SCALE = 0.6f
 
 /**
  * Eén foto groot, met de acties erbij: bewaren of niet bewaren (allebei gaan vanzelf door naar de volgende, om snel door een
@@ -100,11 +122,45 @@ fun ViewerScreen(
     val defaultLook by context.graph.prefs.lookDefault.collectAsState(initial = "")
     val pager = rememberPagerState(initialPage = list.indexOfFirst { it.item.id == startId }.coerceAtLeast(0)) { list.size }
     var zoomed by remember { mutableStateOf(false) }
+    // Naar beneden slepen sluit de foto, zoals in Immich: de foto blijft onder je vinger, ook zijwaarts en weer omhoog, en wordt kleiner
+    // naarmate je lager komt. Los je hem los, dan sluit hij (ver genoeg of snel genoeg) of veert hij terug.
+    var drag by remember { mutableStateOf(Offset.Zero) }
+    var areaHeight by remember { mutableFloatStateOf(1f) }
+    var closing by remember { mutableStateOf(false) }
+    // Na het loslaten loopt dit door naar 1, zodat alles netjes wegvalt ook al is de foto maar tot de drempel gesleept.
+    var closeFade by remember { mutableFloatStateOf(0f) }
+    val settleJob = remember { arrayOfNulls<Job>(1) }
+    /** 0 = op zijn plek, 1 = ver genoeg weggesleept om alles te laten wegvallen. */
+    fun progress() = maxOf((drag.y.coerceAtLeast(0f) / (areaHeight * DISMISS_RANGE)).coerceIn(0f, 1f), closeFade)
+    val backdrop = MaterialTheme.colorScheme.background
+    fun springBack(velocity: Velocity) {
+        settleJob[0] = scope.launch {
+            animate(Offset.VectorConverter, drag, Offset.Zero, Offset(velocity.x, velocity.y), spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessMediumLow)) { value, _ -> drag = value }
+        }
+    }
+    fun closeNow(velocity: Velocity) {
+        closing = true
+        onClose()
+        // Het scherm wisselt al; de foto zakt nog even door terwijl hij met het scherm wegvervaagt.
+        settleJob[0] = scope.launch {
+            launch { animate(closeFade, 1f, animationSpec = tween(240)) { value, _ -> closeFade = value } }
+            animate(Offset.VectorConverter, drag, drag + Offset(0f, areaHeight * 0.2f), Offset(velocity.x, velocity.y), tween(240, easing = LinearOutSlowInEasing)) { value, _ -> drag = value }
+        }
+    }
     LaunchedEffect(pager.currentPage) { zoomed = false }
     val current = list[pager.currentPage.coerceIn(0, list.lastIndex)]
+    // Knoppen en kop zijn al weg na een vijfde van het sleepbereik, zodat ze niet over de galerij eronder hangen.
+    val barsFade: androidx.compose.ui.graphics.GraphicsLayerScope.() -> Unit = { alpha = 1f - (progress() * BARS_FADE).coerceAtMost(1f) }
 
-    Column(Modifier.fillMaxSize().navigationBarsPadding()) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+    Column(
+        Modifier.fillMaxSize()
+            // De achtergrond wordt doorzichtig naarmate je de foto wegsleept: de galerij eronder komt langzaam terug.
+            .drawBehind { drawRect(backdrop, alpha = 1f - (progress() * BACKDROP_FADE).coerceAtMost(1f)) }
+            // De viewer ligt over de galerij: aanrakingen mogen er niet doorheen vallen.
+            .pointerInput(Unit) {}
+            .navigationBarsPadding(),
+    ) {
+        Row(Modifier.fillMaxWidth().graphicsLayer(block = barsFade).padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             KeeperIconButton(KeeperIcons.Back, stringResource(R.string.settings_back), onClose)
             Column(Modifier.weight(1f).padding(start = 4.dp)) {
                 Text(current.item.name, style = MaterialTheme.typography.titleMedium, maxLines = 1)
@@ -115,16 +171,61 @@ fun ViewerScreen(
             }
             if (current.item.isFavorite) Icon(KeeperIcons.Favorite, stringResource(R.string.filter_favorites), tint = Color(0xFFFF8FA3), modifier = Modifier.padding(end = 14.dp).size(20.dp))
         }
-        HorizontalPager(
-            state = pager,
-            modifier = Modifier.weight(1f).fillMaxWidth(),
-            userScrollEnabled = !zoomed,
-            key = { list.getOrNull(it)?.item?.id ?: it },
-        ) { page ->
-            val photo = list.getOrNull(page)
-            if (photo != null) ZoomablePhoto(photo, active = page == pager.currentPage, onZoomed = { zoomed = it })
+        // De vaste omlijsting vangt het gebaar op (in de Initial-ronde, vóór de pager); de pager erbinnen krijgt de verplaatsing.
+        // Zo staan de aanraakcoördinaten niet mee te schuiven met de foto.
+        Box(
+            Modifier.weight(1f).fillMaxWidth()
+                .onSizeChanged { areaHeight = it.height.toFloat().coerceAtLeast(1f) }
+                .pointerInput(Unit) {
+                    val slop = viewConfiguration.touchSlop
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                        if (zoomed || closing) return@awaitEachGesture
+                        settleJob[0]?.cancel() // een foto die nog terugveert, pak je gewoon weer vast
+                        val tracker = VelocityTracker()
+                        tracker.addPosition(down.uptimeMillis, down.position)
+                        var travelled = Offset.Zero
+                        var dragging = false
+                        while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            // Een tweede vinger is knijpen om te zoomen: daar blijven we af.
+                            if (!dragging && event.changes.size > 1) return@awaitEachGesture
+                            tracker.addPosition(change.uptimeMillis, change.position)
+                            if (!change.pressed) break
+                            val delta = change.positionChange()
+                            if (!dragging) {
+                                travelled += delta
+                                if (travelled.getDistance() > slop) {
+                                    // Alleen een beweging die vooral naar beneden gaat sleept de foto weg; zijwaarts is voor de pager.
+                                    if (travelled.y > 0f && abs(travelled.y) > abs(travelled.x)) dragging = true else return@awaitEachGesture
+                                }
+                            } else {
+                                drag += delta
+                                change.consume()
+                            }
+                        }
+                        if (!dragging) return@awaitEachGesture
+                        val velocity = tracker.calculateVelocity()
+                        // Ver genoeg gesleept, of snel naar beneden gegooid, sluit. Terug omhoog en loslaten laat hem staan.
+                        if (drag.y > areaHeight * CLOSE_AT || (velocity.y > CLOSE_VELOCITY && drag.y > slop * 2)) closeNow(velocity) else springBack(velocity)
+                    }
+                },
+        ) {
+            HorizontalPager(
+                state = pager,
+                modifier = Modifier.fillMaxSize().graphicsLayer {
+                    val scale = 1f - (1f - MIN_DRAG_SCALE) * progress()
+                    translationX = drag.x; translationY = drag.y; scaleX = scale; scaleY = scale
+                },
+                userScrollEnabled = !zoomed,
+                key = { list.getOrNull(it)?.item?.id ?: it },
+            ) { page ->
+                val photo = list.getOrNull(page)
+                if (photo != null) ZoomablePhoto(photo, active = page == pager.currentPage, onZoomed = { zoomed = it })
+            }
         }
-        Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.graphicsLayer(block = barsFade).padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(stringResource(current.status.label), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
                 Text(

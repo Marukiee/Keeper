@@ -664,7 +664,8 @@ fun PrimaryPillButton(
             .bouncyClickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 24.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        // Gecentreerd: een knop die door weight() of fillMaxWidth() breder is dan zijn inhoud, houdt icoon en tekst in het midden.
+        horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
     ) {
         if (icon != null) {
             Icon(painter = icon, contentDescription = null, tint = ink, modifier = Modifier.size(18.dp))

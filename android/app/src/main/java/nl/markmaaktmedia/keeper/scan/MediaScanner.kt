@@ -70,9 +70,13 @@ class MediaScanner(private val context: Context, private val prefs: KeeperPrefs)
 
     /** Een voorbeeld voor in de lijst. DNG's geven hun ingebedde preview. Null als Android er geen kan maken. */
     suspend fun thumbnail(item: MediaItem, edge: Int): Bitmap? = withContext(Dispatchers.IO) {
-        cached(item, edge) ?: runCatching { context.contentResolver.loadThumbnail(imageUri(item.id), Size(edge, edge), null) }.getOrNull()
-            ?.also { cache.put("${item.id}:$edge", it) }
+        // Een DNG gaat door dezelfde decoder als de viewer, anders toont de tegel Android's miniatuur zonder het camerafilter
+        // terwijl de foto groot er wel mee staat. Voor een JPG is Android's miniatuur snel en gelijk.
+        cached(item, edge) ?: ((if (item.isDng) decode(item, edge) else null) ?: system(item, edge))?.also { cache.put("${item.id}:$edge", it) }
     }
+
+    private fun system(item: MediaItem, edge: Int): Bitmap? =
+        runCatching { context.contentResolver.loadThumbnail(imageUri(item.id), Size(edge, edge), null) }.getOrNull()
 
     /** Een groot beeld voor het bekijken: scherper dan Android's eigen miniatuur, en bewaard voor de volgende keer. */
     suspend fun large(item: MediaItem, edge: Int): Bitmap? {
@@ -90,15 +94,18 @@ class MediaScanner(private val context: Context, private val prefs: KeeperPrefs)
      * Voor een RAW geeft Android hier zijn eigen weergave; die kan afwijken van de camera-versie.
      */
     suspend fun detail(item: MediaItem, maxEdge: Int): Bitmap? = withContext(Dispatchers.IO) {
-        runCatching {
-            val source = android.graphics.ImageDecoder.createSource(context.contentResolver, imageUri(item.id))
-            android.graphics.ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
-                val longest = maxOf(info.size.width, info.size.height)
-                if (longest > maxEdge) decoder.setTargetSampleSize((longest + maxEdge - 1) / maxEdge)
-                decoder.allocator = android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE
-            }
-        }.getOrNull() ?: thumbnail(item, maxEdge)
+        decode(item, maxEdge) ?: thumbnail(item, maxEdge)
     }
+
+    /** ImageDecoder op het bestand zelf, tot [maxEdge] pixels op de lange kant. Null als Android het niet kan lezen. */
+    private fun decode(item: MediaItem, maxEdge: Int): Bitmap? = runCatching {
+        val source = android.graphics.ImageDecoder.createSource(context.contentResolver, imageUri(item.id))
+        android.graphics.ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+            val longest = maxOf(info.size.width, info.size.height)
+            if (longest > maxEdge) decoder.setTargetSampleSize((longest + maxEdge - 1) / maxEdge)
+            decoder.allocator = android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE
+        }
+    }.getOrNull()
 
     private val cache = object : android.util.LruCache<String, Bitmap>((Runtime.getRuntime().maxMemory() / 8).toInt().coerceAtMost(96 shl 20)) {
         override fun sizeOf(key: String, value: Bitmap) = value.byteCount
