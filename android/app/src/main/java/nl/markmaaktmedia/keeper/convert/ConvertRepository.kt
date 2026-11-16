@@ -53,8 +53,9 @@ class ConvertRepository(private val context: Context, prefs: KeeperPrefs, scanne
                     job.run({ p -> _state.value = ConvertState.Running(p.index, p.total, p.name, p.fraction, stop) }, { stop })
                 } catch (e: kotlinx.coroutines.CancellationException) {
                     throw e
-                } catch (e: Exception) {
-                    ConvertReport(failures = listOf(ConvertFailure("", e.message ?: e.javaClass.simpleName)))
+                } catch (t: Throwable) {
+                    // Ook een OutOfMemoryError op een enorme foto: de run is dan afgelopen, maar de app, de melding en de wakelock blijven in de pas.
+                    ConvertReport(failures = listOf(ConvertFailure("", t.message ?: t.javaClass.simpleName)))
                 }
                 _state.value = ConvertState.Finished(report)
             }

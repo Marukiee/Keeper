@@ -19,6 +19,13 @@ import java.io.OutputStream
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.coroutines.coroutineContext
 
+/**
+ * Alleen voor de debug-ontvanger (zie `ConvertDebugReceiver`), zodat de hele keten op de telefoon te testen is zonder de selectie van Mark
+ * naar de echte uitvoermap te sturen: [only] beperkt de run tot die MediaStore-ids (ze tellen dan als bewaard), [folder] vervangt de
+ * uitvoermap. [readOriginal] uit leest zonder `setRequireOriginal`, voor als de locatie-toestemming ontbreekt; de uitvoer heeft dan geen GPS.
+ */
+class ConvertOptions(val only: Set<Long>? = null, val folder: String? = null, val readOriginal: Boolean = true)
+
 /** Waar de run mee bezig is. [index] telt vanaf 1; [fraction] is hoever die ene foto is (0 tot 1). */
 data class ConvertProgress(val index: Int, val total: Int, val name: String, val fraction: Float)
 
@@ -52,19 +59,27 @@ class ConvertJob(private val context: Context, private val prefs: KeeperPrefs, p
     private val store = OutputStore(resolver)
     private val work = File(context.cacheDir, "convert")
 
-    suspend fun run(onProgress: (ConvertProgress) -> Unit, stopRequested: () -> Boolean): ConvertReport = withContext(Dispatchers.IO) {
-        if (context.checkSelfPermission(Manifest.permission.ACCESS_MEDIA_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+    /** Of lezen via `setRequireOriginal` gaat (altijd, behalve in een debug-test zonder locatie-toestemming). */
+    private var requireOriginal = true
+
+    suspend fun run(onProgress: (ConvertProgress) -> Unit, stopRequested: () -> Boolean, options: ConvertOptions = ConvertOptions()): ConvertReport = withContext(Dispatchers.IO) {
+        requireOriginal = options.readOriginal
+        if (options.readOriginal && context.checkSelfPermission(Manifest.permission.ACCESS_MEDIA_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             return@withContext ConvertReport(problem = ConvertReport.Problem.NoLocationAccess)
         }
         val job = coroutineContext.job
         val cancelled = { stopRequested() || !job.isActive }
 
         val snapshot = scanner.scan()
-        val photos = Classifier.classify(
-            snapshot.items, snapshot.probes, prefs.skipped.first(), prefs.cameraVersion.first(), snapshot.doneNames, snapshot.lightroomFolder, prefs.rejected.first(),
-        )
-        val folder = OutputStore.folder(prefs.outputFolder.first())
-        val plan = ConvertPlan.of(photos, snapshot.lightroomFolder, snapshot.doneNames)
+        val only = options.only
+        // Een test telt zijn foto's als bewaard, zonder iets in de instellingen te veranderen.
+        val kept = prefs.cameraVersion.first() + if (only == null) emptySet() else snapshot.items.filter { it.id in only }.map { it.name }
+        // In een testmap zegt wat er in de echte uitvoermap staat niets.
+        val done = if (options.folder == null) snapshot.doneNames else emptySet()
+        val photos = Classifier.classify(snapshot.items, snapshot.probes, prefs.skipped.first(), kept, done, snapshot.lightroomFolder, prefs.rejected.first())
+            .filter { only == null || it.item.id in only }
+        val folder = OutputStore.folder(options.folder ?: prefs.outputFolder.first())
+        val plan = ConvertPlan.of(photos, snapshot.lightroomFolder, done)
         val settings = ConvertSettings(
             // Het gekozen "q94" is jpegli; onze encoder is libjpeg en geeft bij twee lager dezelfde grootte en kwaliteit (gemeten in fase 2).
             jpegQuality = (prefs.quality.first() - 2).coerceIn(50, 98),
@@ -138,8 +153,10 @@ class ConvertJob(private val context: Context, private val prefs: KeeperPrefs, p
         }
     }
 
-    private fun openOriginal(id: Long): ParcelFileDescriptor =
-        resolver.openFileDescriptor(MediaStore.setRequireOriginal(MediaScanner.imageUri(id)), "r") ?: throw java.io.IOException("kan het origineel niet openen")
+    private fun openOriginal(id: Long): ParcelFileDescriptor {
+        val uri = MediaScanner.imageUri(id)
+        return resolver.openFileDescriptor(if (requireOriginal) MediaStore.setRequireOriginal(uri) else uri, "r") ?: throw java.io.IOException("kan het origineel niet openen")
+    }
 
     private fun copyOriginal(id: Long, size: Long, out: OutputStream, progress: (Float) -> Unit): Written {
         ParcelFileDescriptor.AutoCloseInputStream(openOriginal(id)).use { copy(it, out, size, progress) }

@@ -56,7 +56,8 @@ class MediaScanner(private val context: Context, private val prefs: KeeperPrefs)
             last?.let { (was, snapshot) -> if (generation >= 0 && was == key) return@withContext snapshot }
             val items = query(since, lightroom, cshot)
             val probed = items
-                .filter { it.isJpeg && !Classifier.isIgnored(it) && !it.relativePath.startsWith(lightroom, ignoreCase = true) && !Classifier.isGalleryEdit(it.name) }
+                // Ook Galerij-bewerkingen: die van de Oppo houden de gain map van het origineel (gemeten), dus ze moeten net als een camera-JPG naar SDR.
+                .filter { it.isJpeg && !Classifier.isIgnored(it) && !it.relativePath.startsWith(lightroom, ignoreCase = true) }
                 .associate { it.id to probe(it) }
             // Wat niet meer in de lijst staat, hoeft niet bewaard te blijven.
             probes.keys.retainAll(probed.keys)
