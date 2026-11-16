@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import androidx.core.app.NotificationManagerCompat
+import nl.markmaaktmedia.keeper.convert.ConvertRepository
 import nl.markmaaktmedia.keeper.data.KeeperPrefs
 import nl.markmaaktmedia.keeper.scan.MediaScanner
 import nl.markmaaktmedia.keeper.update.UpdateRepository
@@ -14,6 +15,7 @@ class Graph(context: Context) {
     val prefs = KeeperPrefs(context)
     val updater = UpdateRepository(context, prefs)
     val scanner = MediaScanner(context, prefs)
+    val converter = ConvertRepository(context.applicationContext, prefs, scanner)
 }
 
 class KeeperApp : Application() {
@@ -33,12 +35,23 @@ val Context.graph: Graph
 
 object Channels {
     const val UPDATE = "update"
+    /** De voortgang van het omzetten (stil) en het verslag aan het eind (met geluid). */
+    const val CONVERT = "convert"
+    const val CONVERT_DONE = "convert_done"
 
     fun create(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(
             NotificationChannel(UPDATE, context.getString(R.string.channel_update), NotificationManager.IMPORTANCE_DEFAULT)
                 .apply { description = context.getString(R.string.channel_update_desc) },
+        )
+        manager.createNotificationChannel(
+            NotificationChannel(CONVERT, context.getString(R.string.channel_convert), NotificationManager.IMPORTANCE_LOW)
+                .apply { description = context.getString(R.string.channel_convert_desc) },
+        )
+        manager.createNotificationChannel(
+            NotificationChannel(CONVERT_DONE, context.getString(R.string.channel_convert_done), NotificationManager.IMPORTANCE_DEFAULT)
+                .apply { description = context.getString(R.string.channel_convert_done_desc) },
         )
     }
 

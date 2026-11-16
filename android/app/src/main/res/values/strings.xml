@@ -28,7 +28,6 @@
     <string name="today_left_sub">RAW with an export and originals with a Gallery edit</string>
     <string name="today_done">Already done</string>
     <string name="today_prepare">Convert all</string>
-    <string name="today_prepare_soon">Converting comes in the next version. For now you can keep photos and clean up.</string>
     <string name="today_empty_title">No new photos</string>
     <string name="today_empty_body">Nothing new since %1$s.</string>
 
@@ -89,7 +88,6 @@
     <string name="gallery_picked">%1$d selected</string>
     <string name="gallery_pick_hint">Select photos</string>
     <string name="gallery_prepare">Convert</string>
-    <string name="gallery_prepare_soon">Converting comes in the next version</string>
     <string name="gallery_no_favorites_title">No favorites</string>
     <string name="gallery_no_favorites_body">Photos with a heart from your phone\'s Gallery show up here, if it stores the heart in Android.</string>
     <string name="gallery_empty_filter">Nothing in this selection</string>
@@ -166,4 +164,35 @@
     <string name="appearance_black_sub">For OLED screens, saves a little battery. Off by default.</string>
     <string name="appearance_accent">Accent</string>
     <string name="appearance_style">Palette style</string>
+    <!-- Convert -->
+    <string name="today_prepare_note">The photos that go along are written to the output folder. The originals stay where they are.</string>
+    <string name="channel_convert">Converting</string>
+    <string name="channel_convert_desc">Progress while photos are converted</string>
+    <string name="channel_convert_done">Converting finished</string>
+    <string name="channel_convert_done_desc">A summary when converting is done</string>
+    <string name="convert_notification_title">Keeper is converting photos</string>
+    <string name="convert_preparing">Looking at what to convert</string>
+    <string name="convert_progress">Photo %1$d of %2$d: %3$s</string>
+    <string name="convert_stop">Stop</string>
+    <string name="convert_stopping">Stopping</string>
+    <string name="convert_title_running">Converting</string>
+    <string name="convert_done">Converting done</string>
+    <string name="convert_done_with_problems">Converting done, with problems</string>
+    <string name="convert_stopped">Converting stopped</string>
+    <string name="convert_nothing">There was nothing to convert.</string>
+    <plurals name="convert_photos_done">
+        <item quantity="one">%d photo ready</item>
+        <item quantity="other">%d photos ready</item>
+    </plurals>
+    <string name="convert_saved">%1$s saved</string>
+    <string name="convert_failed_count">%1$d failed</string>
+    <string name="convert_result_converted">%1$d converted to SDR</string>
+    <string name="convert_result_copied">%1$d copied as they are</string>
+    <string name="convert_result_skipped">%1$d were already in the folder</string>
+    <string name="convert_result_size">%1$s became %2$s</string>
+    <string name="convert_result_folder">In %1$s</string>
+    <string name="convert_failures_title">These did not work</string>
+    <string name="convert_failures_more">and %1$d more</string>
+    <string name="convert_close">OK</string>
+    <string name="convert_need_location">Keeper needs access to the location of your photos, or the GPS data is lost. Allow it in the settings of Keeper.</string>
 </resources>

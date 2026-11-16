@@ -1,6 +1,9 @@
 package nl.markmaaktmedia.keeper.ui
 
 import android.Manifest
+import android.os.Build
+import android.widget.Toast
+import nl.markmaaktmedia.keeper.convert.ConvertState
 import android.content.pm.PackageManager
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -86,6 +89,26 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
         }
     }
 
+    // Omzetten: de locatie van de foto's en meldingen (voortgang, verslag) vragen we vlak voor de eerste run. Zonder locatie begint hij niet,
+    // want dan zou Android de GPS-gegevens uit elk bestand halen en kwamen ze niet in de uitvoer.
+    val converter = context.graph.converter
+    val convertState by converter.state.collectAsState()
+    val outputFolder by context.graph.prefs.outputFolder.collectAsState(initial = "")
+    val hasLocation = { ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_MEDIA_LOCATION) == PackageManager.PERMISSION_GRANTED }
+    val convertPermissions = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        if (hasLocation()) converter.start() else Toast.makeText(context, R.string.convert_need_location, Toast.LENGTH_LONG).show()
+    }
+    val startConvert: () -> Unit = {
+        val missing = buildList {
+            if (!hasLocation()) add(Manifest.permission.ACCESS_MEDIA_LOCATION)
+            if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        if (missing.isEmpty()) converter.start() else convertPermissions.launch(missing.toTypedArray())
+    }
+    val converting = convertState is ConvertState.Running
+    // Zodra een run klaar is, staat er misschien van alles anders in de uitvoermap: opnieuw kijken.
+    LaunchedEffect(convertState is ConvertState.Finished) { if (convertState is ConvertState.Finished && permitted) vm.refresh() }
+
     // Elke keer dat de app weer vooraan komt: opnieuw kijken, want er kunnen foto's bij zijn gekomen.
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         permitted = granted(context)
@@ -116,7 +139,7 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
         ) { (currentSub, currentTab, currentPage) ->
             when (currentSub) {
                 Sub.Viewer -> Unit
-                Sub.Overview -> TodayScreen(state, permitted, { ask.launch(Manifest.permission.READ_MEDIA_IMAGES) }, { tab = 1; sub = Sub.None }, { sub = Sub.None }, padding)
+                Sub.Overview -> TodayScreen(state, permitted, { ask.launch(Manifest.permission.READ_MEDIA_IMAGES) }, { tab = 1; sub = Sub.None }, startConvert, converting, { sub = Sub.None }, padding)
                 Sub.Page -> SettingsPageScreen(currentPage ?: SettingsPage.Look, { page = it }, pageBack, padding)
                 Sub.None -> when (currentTab) {
                     0 -> GalleryScreen(
@@ -126,6 +149,7 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
                         { photo, shown -> viewer = ViewerRequest(shown.map { it.item.id }, photo.item.id); viewerCurrent = null; sub = Sub.Viewer },
                         { sub = Sub.Overview },
                         trash,
+                        startConvert, converting,
                         bounds = tileBounds,
                         // Zolang de viewer open staat blijft de tegel van de getoonde foto leeg.
                         hiddenId = if (sub == Sub.Viewer) viewerCurrent else null,
@@ -135,6 +159,7 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
                 }
             }
         }
+        ConvertDialog(convertState, outputFolder, { converter.requestStop() }, { converter.acknowledge() })
         PillNavigationBar(
             items = items,
             selectedIndex = tab,

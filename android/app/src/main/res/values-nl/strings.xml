@@ -28,7 +28,6 @@
     <string name="today_left_sub">RAW met een export en originelen met een Galerij-bewerking</string>
     <string name="today_done">Al klaar</string>
     <string name="today_prepare">Alles omzetten</string>
-    <string name="today_prepare_soon">Het omzetten komt in de volgende versie. Nu kun je de foto\'s al bewaren en opruimen.</string>
     <string name="today_empty_title">Geen nieuwe foto\'s</string>
     <string name="today_empty_body">Er is niets nieuws sinds %1$s.</string>
 
@@ -87,7 +86,6 @@
     <string name="gallery_picked">%1$d geselecteerd</string>
     <string name="gallery_pick_hint">Selecteer foto\'s</string>
     <string name="gallery_prepare">Omzetten</string>
-    <string name="gallery_prepare_soon">Het omzetten komt in de volgende versie</string>
     <string name="gallery_no_favorites_title">Geen favorieten</string>
     <string name="gallery_no_favorites_body">Hier staan foto\'s met een hartje uit de Galerij van je telefoon, als die het hartje in Android opslaat.</string>
     <string name="gallery_empty_filter">Niets in deze selectie</string>
@@ -164,4 +162,35 @@
     <string name="appearance_black_sub">Voor OLED-schermen, spaart een beetje batterij. Standaard uit.</string>
     <string name="appearance_accent">Accent</string>
     <string name="appearance_style">Paletstijl</string>
+    <!-- Omzetten -->
+    <string name="today_prepare_note">De foto\'s die meegaan komen in de uitvoermap. De originelen blijven staan.</string>
+    <string name="channel_convert">Omzetten</string>
+    <string name="channel_convert_desc">Voortgang terwijl foto\'s worden omgezet</string>
+    <string name="channel_convert_done">Omzetten klaar</string>
+    <string name="channel_convert_done_desc">Een samenvatting als het omzetten klaar is</string>
+    <string name="convert_notification_title">Keeper zet foto\'s om</string>
+    <string name="convert_preparing">Kijkt wat er omgezet moet worden</string>
+    <string name="convert_progress">Foto %1$d van %2$d: %3$s</string>
+    <string name="convert_stop">Stop</string>
+    <string name="convert_stopping">Stoppen</string>
+    <string name="convert_title_running">Omzetten</string>
+    <string name="convert_done">Omzetten klaar</string>
+    <string name="convert_done_with_problems">Omzetten klaar, met problemen</string>
+    <string name="convert_stopped">Omzetten gestopt</string>
+    <string name="convert_nothing">Er was niets om te zetten.</string>
+    <plurals name="convert_photos_done">
+        <item quantity="one">%d foto klaar</item>
+        <item quantity="other">%d foto\'s klaar</item>
+    </plurals>
+    <string name="convert_saved">%1$s bespaard</string>
+    <string name="convert_failed_count">%1$d mislukt</string>
+    <string name="convert_result_converted">%1$d omgezet naar SDR</string>
+    <string name="convert_result_copied">%1$d ongewijzigd gekopieerd</string>
+    <string name="convert_result_skipped">%1$d stonden er al in de map</string>
+    <string name="convert_result_size">%1$s werd %2$s</string>
+    <string name="convert_result_folder">In %1$s</string>
+    <string name="convert_failures_title">Dit lukte niet</string>
+    <string name="convert_failures_more">en nog %1$d</string>
+    <string name="convert_close">OK</string>
+    <string name="convert_need_location">Keeper heeft toegang tot de locatie van je foto\'s nodig, anders gaan de GPS-gegevens verloren. Sta dat toe in de instellingen van Keeper.</string>
 </resources>

@@ -1,7 +1,6 @@
 package nl.markmaaktmedia.keeper.ui
 
 import android.os.SystemClock
-import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
 import androidx.compose.animation.Crossfade
@@ -135,6 +134,10 @@ fun GalleryScreen(
     onOpen: (Photo, List<Photo>) -> Unit,
     onOverview: () -> Unit,
     onTrashMany: (List<Photo>) -> Unit,
+    /** Start het omzetten van alles wat meegaat. */
+    onConvert: () -> Unit,
+    /** Er loopt al een run: de knop doet dan niets. */
+    converting: Boolean,
     /** De tegels melden hier waar ze staan, voor de vlucht van de foto terug naar zijn tegel. */
     bounds: TileBounds = TileBounds(),
     /** De foto die nu groot open staat: zijn tegel blijft leeg (het gat waar hij naartoe terugvliegt) en de lijst scrolt ernaartoe. */
@@ -242,6 +245,7 @@ fun GalleryScreen(
             if (hasPermission && state.photos.isNotEmpty()) {
                 BottomBar(
                     state, selecting, pickedPhotos, onOverview,
+                    onConvert = onConvert, converting = converting,
                     onClear = ::endSelecting,
                     // Zitten er originelen met een bewerkte versie bij, dan eerst vragen of Keeper die ook zelf mag exporteren.
                     onKeep = { if (pickedPhotos.any { it.askBeforeKeeping }) askEdited = true else { onKeep(pickedPhotos); endSelecting() } },
@@ -557,6 +561,8 @@ private fun BottomBar(
     selecting: Boolean,
     picked: List<Photo>,
     onOverview: () -> Unit,
+    onConvert: () -> Unit,
+    converting: Boolean,
     onClear: () -> Unit,
     onKeep: () -> Unit,
     onReject: () -> Unit,
@@ -603,10 +609,7 @@ private fun BottomBar(
                             modifier = Modifier.bouncyClickable(onClick = onOverview),
                         )
                     }
-                    PrimaryPillButton(stringResource(R.string.gallery_prepare), {
-                        // Fase 1 leest alleen; het omzetten volgt na Mark's OK voor fase 2.
-                        Toast.makeText(context, R.string.gallery_prepare_soon, Toast.LENGTH_SHORT).show()
-                    })
+                    PrimaryPillButton(stringResource(R.string.gallery_prepare), onConvert, enabled = s.goingCount > 0 && !converting)
                 }
             }
         }

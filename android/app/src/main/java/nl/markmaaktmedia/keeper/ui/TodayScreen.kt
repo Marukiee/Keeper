@@ -34,6 +34,8 @@ fun TodayScreen(
     hasPermission: Boolean,
     onRequestPermission: () -> Unit,
     onOpenEdit: () -> Unit,
+    onConvert: () -> Unit,
+    converting: Boolean,
     onBack: () -> Unit,
     contentPadding: PaddingValues,
 ) {
@@ -63,8 +65,8 @@ fun TodayScreen(
                 item { Breakdown(state, onOpenEdit) }
                 item {
                     Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        PrimaryPillButton(stringResource(R.string.today_prepare), {}, Modifier.fillMaxWidth(), enabled = false)
-                        Text(stringResource(R.string.today_prepare_soon), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        PrimaryPillButton(stringResource(R.string.today_prepare), onConvert, Modifier.fillMaxWidth(), enabled = state.summary.goingCount > 0 && !converting)
+                        Text(stringResource(R.string.today_prepare_note), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
