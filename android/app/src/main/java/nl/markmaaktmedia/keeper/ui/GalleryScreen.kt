@@ -138,6 +138,7 @@ fun GalleryScreen(
     onConvert: () -> Unit,
     /** Er loopt al een run: de knop doet dan niets. */
     converting: Boolean,
+    paused: Boolean,
     /** De tegels melden hier waar ze staan, voor de vlucht van de foto terug naar zijn tegel. */
     bounds: TileBounds = TileBounds(),
     /** De foto die nu groot open staat: zijn tegel blijft leeg (het gat waar hij naartoe terugvliegt) en de lijst scrolt ernaartoe. */
@@ -245,7 +246,7 @@ fun GalleryScreen(
             if (hasPermission && state.photos.isNotEmpty()) {
                 BottomBar(
                     state, selecting, pickedPhotos, onOverview,
-                    onConvert = onConvert, converting = converting,
+                    onConvert = onConvert, converting = converting, paused = paused,
                     onClear = ::endSelecting,
                     // Zitten er originelen met een bewerkte versie bij, dan eerst vragen of Keeper die ook zelf mag exporteren.
                     onKeep = { if (pickedPhotos.any { it.askBeforeKeeping }) askEdited = true else { onKeep(pickedPhotos); endSelecting() } },
@@ -563,6 +564,7 @@ private fun BottomBar(
     onOverview: () -> Unit,
     onConvert: () -> Unit,
     converting: Boolean,
+    paused: Boolean,
     onClear: () -> Unit,
     onKeep: () -> Unit,
     onReject: () -> Unit,
@@ -609,7 +611,7 @@ private fun BottomBar(
                             modifier = Modifier.bouncyClickable(onClick = onOverview),
                         )
                     }
-                    PrimaryPillButton(stringResource(R.string.gallery_prepare), onConvert, enabled = s.goingCount > 0 && !converting)
+                    PrimaryPillButton(stringResource(if (paused) R.string.gallery_continue else R.string.gallery_prepare), onConvert, enabled = s.goingCount > 0 && !converting)
                 }
             }
         }

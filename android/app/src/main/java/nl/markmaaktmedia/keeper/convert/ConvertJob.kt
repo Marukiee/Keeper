@@ -11,7 +11,9 @@ import kotlinx.coroutines.job
 import kotlinx.coroutines.withContext
 import nl.markmaaktmedia.keeper.data.KeeperPrefs
 import nl.markmaaktmedia.keeper.scan.Classifier
+import nl.markmaaktmedia.keeper.scan.MediaItem
 import nl.markmaaktmedia.keeper.scan.MediaScanner
+import nl.markmaaktmedia.keeper.scan.Status
 import nl.markmaaktmedia.keeper.scan.ToneMap
 import java.io.File
 import java.io.FileInputStream
@@ -26,8 +28,8 @@ import kotlin.coroutines.coroutineContext
  */
 class ConvertOptions(val only: Set<Long>? = null, val folder: String? = null, val readOriginal: Boolean = true)
 
-/** Waar de run mee bezig is. [index] telt vanaf 1; [fraction] is hoever die ene foto is (0 tot 1). */
-data class ConvertProgress(val index: Int, val total: Int, val name: String, val fraction: Float)
+/** Waar de run mee bezig is. [index] telt vanaf 1; [fraction] is hoever die ene foto is (0 tot 1). [item] en [how] zijn voor het scherm: welke foto, en wat ermee gebeurt. */
+data class ConvertProgress(val index: Int, val total: Int, val name: String, val fraction: Float, val item: MediaItem? = null, val how: How? = null, val alreadyDone: Int = 0)
 
 class ConvertFailure(val name: String, val reason: String)
 
@@ -38,7 +40,10 @@ class ConvertReport(
     /** Overgeslagen omdat de naam er al stond of dubbel was; geen fout. */
     val skipped: Int = 0,
     val failures: List<ConvertFailure> = emptyList(),
-    val cancelled: Boolean = false,
+    /** Gepauzeerd op verzoek: wat nog niet aan de beurt was, staat in [left] en komt bij Doorgaan gewoon weer aan de beurt. */
+    val paused: Boolean = false,
+    /** Hoeveel foto's er nog te doen stonden toen hij pauzeerde (de foto waar hij mee bezig was telt mee). */
+    val left: Int = 0,
     val bytesIn: Long = 0,
     val bytesOut: Long = 0,
     val problem: Problem? = null,
@@ -91,19 +96,22 @@ class ConvertJob(private val context: Context, private val prefs: KeeperPrefs, p
 
         var converted = 0
         var copied = 0
-        var skipped = plan.existing.size
+        // Wat al in de uitvoermap staat, is eerder gedaan en blijft met rust; wat Mark daaruit verwijderd heeft, is hier geen Klaar meer en komt dus weer aan de beurt.
+        val alreadyDone = photos.count { it.status == Status.Done }
+        var skipped = plan.existing.size + alreadyDone
         var bytesIn = 0L
         var bytesOut = 0L
         var stopped = false
+        var left = 0
         val failures = ArrayList<ConvertFailure>()
         plan.clashes.forEach { failures += ConvertFailure(it.item.name, "naam al in gebruik") }
 
         for ((i, step) in plan.steps.withIndex()) {
-            if (cancelled()) { stopped = true; break }
+            if (cancelled()) { stopped = true; left = plan.steps.size - i; break }
             val name = step.photo.item.name
-            onProgress(ConvertProgress(i + 1, plan.steps.size, name, 0f))
+            onProgress(ConvertProgress(i + 1, plan.steps.size, name, 0f, step.photo.item, step.how, alreadyDone))
             try {
-                val result = writeOne(step, folder, settings, cancelled) { onProgress(ConvertProgress(i + 1, plan.steps.size, name, it)) }
+                val result = writeOne(step, folder, settings, cancelled) { onProgress(ConvertProgress(i + 1, plan.steps.size, name, it, step.photo.item, step.how, alreadyDone)) }
                 if (step.how == How.Copy || result.copiedAsIs) copied++ else converted++
                 bytesIn += result.bytesIn
                 bytesOut += result.bytesOut
@@ -113,13 +121,14 @@ class ConvertJob(private val context: Context, private val prefs: KeeperPrefs, p
                 // Door ons gestopt, of de hele taak is geannuleerd: dan niet verder en de annulering doorgeven.
                 if (!job.isActive) throw e
                 stopped = true
+                left = plan.steps.size - i
                 break
             } catch (e: Exception) {
                 failures += ConvertFailure(name, e.message?.takeIf { it.isNotBlank() } ?: e.javaClass.simpleName)
             }
         }
         work.deleteRecursively()
-        ConvertReport(converted, copied, skipped, failures, stopped, bytesIn, bytesOut)
+        ConvertReport(converted, copied, skipped, failures, stopped, left, bytesIn, bytesOut)
     }
 
     /** De naam stond er net al (een andere run of app was sneller): overslaan, geen fout. */
@@ -166,7 +175,7 @@ class ConvertJob(private val context: Context, private val prefs: KeeperPrefs, p
     /** SDR uit een Ultra HDR-JPEG; zonder gain map (de kop zei anders) gaat het bestand zoals het is. */
     private fun convert(source: JpegSource, size: Long, out: OutputStream, settings: ConvertSettings, cancelled: () -> Boolean, progress: (Float) -> Unit): Written =
         try {
-            Converter().convert(source, out, settings, { head, _, _ -> OutputMetadata.segments(head) }, progress, cancelled)
+            Converter(log = { android.util.Log.d("KeeperConvert", it) }).convert(source, out, settings, { head, _, _ -> OutputMetadata.segments(head) }, progress, cancelled)
             Written(size, 0, false)
         } catch (_: NoGainMapException) {
             ParcelFileDescriptor.AutoCloseInputStream(source.open()).use { copy(it, out, size, progress) }

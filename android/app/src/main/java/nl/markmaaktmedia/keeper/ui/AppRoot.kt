@@ -106,6 +106,8 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
         if (missing.isEmpty()) converter.start() else convertPermissions.launch(missing.toTypedArray())
     }
     val converting = convertState is ConvertState.Running
+    // Na een pauze heet de knop Doorgaan; het onthouden zit in de instellingen, dus het geldt ook na het afsluiten van de app.
+    val paused by context.graph.prefs.convertPaused.collectAsState(initial = false)
     // Zodra een run klaar is, staat er misschien van alles anders in de uitvoermap: opnieuw kijken.
     LaunchedEffect(convertState is ConvertState.Finished) { if (convertState is ConvertState.Finished && permitted) vm.refresh() }
 
@@ -139,7 +141,7 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
         ) { (currentSub, currentTab, currentPage) ->
             when (currentSub) {
                 Sub.Viewer -> Unit
-                Sub.Overview -> TodayScreen(state, permitted, { ask.launch(Manifest.permission.READ_MEDIA_IMAGES) }, { tab = 1; sub = Sub.None }, startConvert, converting, { sub = Sub.None }, padding)
+                Sub.Overview -> TodayScreen(state, permitted, { ask.launch(Manifest.permission.READ_MEDIA_IMAGES) }, { tab = 1; sub = Sub.None }, startConvert, converting, paused, { sub = Sub.None }, padding)
                 Sub.Page -> SettingsPageScreen(currentPage ?: SettingsPage.Look, { page = it }, pageBack, padding)
                 Sub.None -> when (currentTab) {
                     0 -> GalleryScreen(
@@ -149,7 +151,7 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
                         { photo, shown -> viewer = ViewerRequest(shown.map { it.item.id }, photo.item.id); viewerCurrent = null; sub = Sub.Viewer },
                         { sub = Sub.Overview },
                         trash,
-                        startConvert, converting,
+                        startConvert, converting, paused,
                         bounds = tileBounds,
                         // Zolang de viewer open staat blijft de tegel van de getoonde foto leeg.
                         hiddenId = if (sub == Sub.Viewer) viewerCurrent else null,
@@ -159,7 +161,7 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
                 }
             }
         }
-        ConvertDialog(convertState, outputFolder, { converter.requestStop() }, { converter.acknowledge() })
+        ConvertDialog(convertState, outputFolder, { converter.requestPause() }, startConvert, { converter.acknowledge() })
         PillNavigationBar(
             items = items,
             selectedIndex = tab,

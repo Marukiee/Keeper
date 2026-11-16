@@ -88,8 +88,44 @@ class JpegEncoderTest {
         val data = encode(gradient(40, 24), 40, 24, 90, true, listOf(exif, icc))
         val head = JpegParser.readHead(ByteArrayInputStream(data))!!
         assertEquals(40, head.width); assertEquals(24, head.height); assertEquals(3, head.components)
-        assertEquals(listOf(0xE1, 0xE2, 0xDB, 0xC0, 0xC4), head.segments.map { it.marker })
+        assertEquals(listOf(0xE1, 0xE2, 0xDB, 0xC0, 0xC4, 0xDD), head.segments.map { it.marker })
         assertArrayEquals(ByteArray(8) { it.toByte() }, head.exifTiff())
+        assertNotNull(JdkJpeg.decode(data))
+    }
+
+    @Test fun `met een pool komen precies dezelfde bytes uit als zonder`() {
+        val pool = java.util.concurrent.Executors.newFixedThreadPool(4)
+        try {
+            for ((w, h) in listOf(200 to 150, 37 to 21, 130 to 70, 16 to 33)) for (c420 in listOf(true, false)) for (rows in listOf(5, 16, 48)) {
+                val rgb = Random(w * 31 + h).nextBytes(w * h * 3)
+                val serial = encode(rgb, w, h, 90, c420, rowsPerCall = rows)
+                val out = ByteArrayOutputStream()
+                val enc = JpegEncoder(out, w, h, 90, c420, emptyList(), pool)
+                var y = 0
+                while (y < h) { val n = minOf(rows, h - y); enc.writeRows(rgb, y * w * 3, n); y += n }
+                enc.finish()
+                assertArrayEquals("${w}x$h 420=$c420 rows=$rows", serial, out.toByteArray())
+            }
+        } finally { pool.shutdownNow() }
+    }
+
+    @Test fun `elke MCU-rij is een restart-interval en de RSTn lopen op van 0 tot 7`() {
+        val w = 40; val h = 16 * 10 + 5 // 11 MCU-rijen bij 4-2-0: 10 restarts
+        val data = encode(gradient(w, h), w, h, 94, true, rowsPerCall = 16)
+        val dri = findSegment(data, 0xDD)
+        assertEquals(3, ((dri[0].toInt() and 0xFF) shl 8) or (dri[1].toInt() and 0xFF)) // 40 px = 3 MCU's per rij
+        // De markeringen tellen in de gecodeerde data (na de SOS), waar FF00 gestuffd is en dus niet meetelt.
+        val sos = (0 until data.size - 1).first { data[it] == 0xFF.toByte() && data[it + 1] == 0xDA.toByte() }
+        val found = ArrayList<Int>()
+        var p = sos + 2 + 12
+        while (p < data.size - 2) {
+            if (data[p] == 0xFF.toByte()) {
+                val m = data[p + 1].toInt() and 0xFF
+                if (m in 0xD0..0xD7) found += m - 0xD0
+                p += 2
+            } else p++
+        }
+        assertEquals(listOf(0, 1, 2, 3, 4, 5, 6, 7, 0, 1), found)
         assertNotNull(JdkJpeg.decode(data))
     }
 

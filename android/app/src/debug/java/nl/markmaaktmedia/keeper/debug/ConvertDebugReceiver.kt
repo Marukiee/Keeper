@@ -70,7 +70,7 @@ class ConvertDebugReceiver : BroadcastReceiver() {
                         ConvertOptions(only, folder, original),
                     )
                 }
-                Log.i(TAG, "JOB converted=${report.converted} copied=${report.copied} skipped=${report.skipped} cancelled=${report.cancelled} problem=${report.problem} in=${report.bytesIn} out=${report.bytesOut}")
+                Log.i(TAG, "JOB converted=${report.converted} copied=${report.copied} skipped=${report.skipped} paused=${report.paused} left=${report.left} problem=${report.problem} in=${report.bytesIn} out=${report.bytesOut}")
                 report.failures.forEach { Log.i(TAG, "JOB MISLUKT ${it.name}: ${it.reason}") }
             } catch (t: Throwable) {
                 Log.e(TAG, "JOB MISLUKT", t)

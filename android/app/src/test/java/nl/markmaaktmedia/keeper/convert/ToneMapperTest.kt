@@ -68,4 +68,47 @@ class ToneMapperTest {
         repeat(500) { h3.add(0.4f) }
         assertEquals(1.0f, h3.peak(), 1e-6f) // ondergrens
     }
+
+    // ---- belichting die de camera volgt ----
+
+    private fun grayRamp(n: Int, scale: Float) = FloatArray(n * 3).also { a ->
+        for (i in 0 until n) { val v = scale * (0.02f + 1.6f * i / (n - 1)); a[i * 3] = v; a[i * 3 + 1] = v; a[i * 3 + 2] = v }
+    }
+
+    private fun meanOf(m: ToneMapper, samples: FloatArray, luma: FloatArray): Double {
+        val out = FloatArray(3)
+        var sum = 0.0
+        for (i in 0 until samples.size / 3) { m.map(samples[i * 3], samples[i * 3 + 1], samples[i * 3 + 2], out, 0); sum += luma[0] * out[0] + luma[1] * out[1] + luma[2] * out[2] }
+        return sum / (samples.size / 3)
+    }
+
+    @Test fun `de belichting wordt zo gezet dat het gemiddelde het doel haalt`() {
+        val luma = ToneMapper.LUMA_P3
+        val samples = grayRamp(2000, 1.0f)
+        // Het doel ligt onder wat de vaste belichting 0,90 geeft: de belichting moet omlaag.
+        val fixed = meanOf(ToneMapper.of(nl.markmaaktmedia.keeper.scan.ToneMap.Normaal, 2.0f, luma), samples, luma)
+        val target = fixed * 0.8
+        val m = ToneMapper.matching(nl.markmaaktmedia.keeper.scan.ToneMap.Normaal, 2.0f, luma, samples, 2000, target)
+        assertEquals(target, meanOf(m, samples, luma), target * 0.005)
+    }
+
+    @Test fun `een foto die al donkerder is dan de camera wordt niet verder opgehelderd`() {
+        val luma = ToneMapper.LUMA_P3
+        val samples = grayRamp(500, 0.5f)
+        val m = ToneMapper.matching(nl.markmaaktmedia.keeper.scan.ToneMap.Normaal, 2.0f, luma, samples, 500, 10.0)
+        check(m, arrayOf(
+            floatArrayOf(0.45f, 0.45f, 0.45f), floatArrayOf(0f, 0f, 0f), floatArrayOf(1.0f, 0.73981f, 0.536382f), floatArrayOf(1f, 1f, 1f),
+            floatArrayOf(0.247337f, 0.527494f, 0.94205f), floatArrayOf(0.899736f, 0.101879f, 0.101879f),
+            floatArrayOf(0.750564f, 0.359979f, 0.269985f), floatArrayOf(0.045f, 0.018f, 0.027f),
+        ))
+    }
+
+    @Test fun `de belichting zakt nooit onder de ondergrens`() {
+        val luma = ToneMapper.LUMA_P3
+        val samples = grayRamp(500, 1.0f)
+        val m = ToneMapper.matching(nl.markmaaktmedia.keeper.scan.ToneMap.Normaal, 2.0f, luma, samples, 500, 0.0001)
+        val out = FloatArray(3)
+        m.map(0.2f, 0.2f, 0.2f, out, 0)
+        assertEquals(0.2f * ToneMapper.MIN_EXPOSURE, out[0], 1e-4f)
+    }
 }

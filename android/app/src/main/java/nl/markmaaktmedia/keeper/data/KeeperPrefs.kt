@@ -43,6 +43,7 @@ class KeeperPrefs(private val context: Context) {
         val seed = stringPreferencesKey("seed")
         val style = stringPreferencesKey("palette_style")
         val pureBlack = booleanPreferencesKey("pure_black")
+        val convertPaused = booleanPreferencesKey("convert_paused")
     }
 
     val autoUpdateCheck: Flow<Boolean> = data.map { it[K.autoUpdate] ?: true }
@@ -134,6 +135,10 @@ class KeeperPrefs(private val context: Context) {
     suspend fun setSeed(seed: ColourSeed) = edit { it[K.seed] = seed.storageKey }
     suspend fun setStyle(style: PaletteStyle) = edit { it[K.style] = style.storageKey }
     suspend fun setPureBlack(on: Boolean) = edit { it[K.pureBlack] = on }
+
+    /** Of de laatste omzetting gepauzeerd is en er dus nog iets te doen staat: de knop heet dan Doorgaan. Wat klaar is, blijft klaar. */
+    val convertPaused: Flow<Boolean> = data.map { it[K.convertPaused] ?: false }.distinctUntilChanged()
+    suspend fun setConvertPaused(on: Boolean) = edit { it[K.convertPaused] = on }
 
     private suspend fun edit(block: (androidx.datastore.preferences.core.MutablePreferences) -> Unit) {
         context.store.edit { block(it) }

@@ -36,8 +36,8 @@ class ConvertService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val repository = applicationContext.graph.converter
-        if (intent?.action == ACTION_STOP) {
-            repository.requestStop()
+        if (intent?.action == ACTION_PAUSE) {
+            repository.requestPause()
             return START_NOT_STICKY
         }
         startForeground(NOTIFICATION_ID, progressNotification(ConvertState.Running()), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
@@ -76,7 +76,7 @@ class ConvertService : Service() {
 
     /** Android 15 geeft een dataSync-service een tijdgrens; daarna stoppen we netjes in plaats van gedood te worden. */
     override fun onTimeout(startId: Int, fgsType: Int) {
-        applicationContext.graph.converter.requestStop()
+        applicationContext.graph.converter.requestPause()
     }
 
     override fun onDestroy() {
@@ -94,7 +94,7 @@ class ConvertService : Service() {
         PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
 
     private fun progressNotification(state: ConvertState.Running): Notification {
-        val stop = PendingIntent.getService(this, 1, Intent(this, ConvertService::class.java).setAction(ACTION_STOP), PendingIntent.FLAG_IMMUTABLE)
+        val pause = PendingIntent.getService(this, 1, Intent(this, ConvertService::class.java).setAction(ACTION_PAUSE), PendingIntent.FLAG_IMMUTABLE)
         val builder = NotificationCompat.Builder(this, Channels.CONVERT)
             .setSmallIcon(R.drawable.ic_stat_keeper)
             .setContentTitle(getString(R.string.convert_notification_title))
@@ -103,8 +103,11 @@ class ConvertService : Service() {
             .setOnlyAlertOnce(true)
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
-            .addAction(0, getString(R.string.convert_stop), stop)
-        if (state.total > 0) {
+            .addAction(0, getString(R.string.convert_pause), pause)
+        if (state.pausing) {
+            builder.setContentText(getString(R.string.convert_pausing))
+            builder.setProgress(0, 0, true)
+        } else if (state.total > 0) {
             builder.setContentText(getString(R.string.convert_progress, state.index, state.total, state.name))
             builder.setProgress(1000, (((state.index - 1) + state.fraction) / state.total * 1000).toInt().coerceIn(0, 1000), false)
         } else {
@@ -116,7 +119,7 @@ class ConvertService : Service() {
 
     private fun doneNotification(report: ConvertReport): Notification = NotificationCompat.Builder(this, Channels.CONVERT_DONE)
         .setSmallIcon(R.drawable.ic_stat_keeper)
-        .setContentTitle(getString(if (report.cancelled) R.string.convert_stopped else if (report.failures.isEmpty()) R.string.convert_done else R.string.convert_done_with_problems))
+        .setContentTitle(getString(if (report.paused) R.string.convert_paused else if (report.failures.isEmpty()) R.string.convert_done else R.string.convert_done_with_problems))
         .setContentText(summaryLine(this, report))
         .setContentIntent(openApp())
         .setAutoCancel(true)
@@ -125,11 +128,12 @@ class ConvertService : Service() {
     companion object {
         private const val NOTIFICATION_ID = 21
         private const val DONE_ID = 22
-        private const val ACTION_STOP = "nl.markmaaktmedia.keeper.convert.STOP"
+        private const val ACTION_PAUSE = "nl.markmaaktmedia.keeper.convert.PAUSE"
 
         /** Eén regel over wat er gebeurd is, voor de melding en het verslag. */
         fun summaryLine(context: Context, report: ConvertReport): String = buildString {
             append(context.resources.getQuantityString(R.plurals.convert_photos_done, report.done, report.done))
+            if (report.paused && report.left > 0) append(", ").append(context.resources.getQuantityString(R.plurals.convert_left, report.left, report.left))
             if (report.savedBytes > 0) append(", ").append(context.getString(R.string.convert_saved, formatBytes(report.savedBytes)))
             if (report.failures.isNotEmpty()) append(", ").append(context.getString(R.string.convert_failed_count, report.failures.size))
         }

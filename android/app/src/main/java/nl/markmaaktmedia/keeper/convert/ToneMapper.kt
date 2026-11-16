@@ -81,6 +81,44 @@ class ToneMapper(
         /** Mix is overal 0,5; belichting en knie per sterkte staan in [nl.markmaaktmedia.keeper.scan.ToneMap]. */
         fun of(t: nl.markmaaktmedia.keeper.scan.ToneMap, peak: Float, luma: FloatArray) =
             ToneMapper(peak, t.exposure.toFloat(), t.knee.toFloat(), 0.5f, luma)
+
+        /** Zo donker mag de belichting hooguit worden gezet om de foto op de helderheid van de camera te brengen. */
+        const val MIN_EXPOSURE = 0.5f
+
+        /**
+         * Dezelfde tone map, maar met de belichting zo gekozen dat de gemiddelde helderheid van het resultaat gelijk is aan die van de
+         * SDR-versie die de camera zelf maakte ([targetMean], lineaire luminantie). Zonder dit komt de HDR-weergave (de gain map tilt de
+         * midden- en schaduwtonen op) gemiddeld zo'n 30% lichter uit dan de camera-SDR, met opgetilde zwarten en bleke huid. De belichting
+         * van de sterkte is het maximum: een foto die al donkerder is dan de camera-SDR wordt niet verder opgehelderd.
+         *
+         * [samples] zijn lineaire HDR-pixels (r, g, b achter elkaar, [count] stuks) uit de eerste pass.
+         */
+        fun matching(
+            t: nl.markmaaktmedia.keeper.scan.ToneMap, peak: Float, luma: FloatArray,
+            samples: FloatArray, count: Int, targetMean: Double,
+        ): ToneMapper {
+            val cap = t.exposure.toFloat()
+            if (count == 0 || cap <= MIN_EXPOSURE) return of(t, peak, luma)
+            val out = FloatArray(3)
+            fun meanAt(exposure: Float): Double {
+                val m = ToneMapper(peak, exposure, t.knee.toFloat(), 0.5f, luma)
+                var sum = 0.0
+                for (i in 0 until count) {
+                    m.map(samples[i * 3], samples[i * 3 + 1], samples[i * 3 + 2], out, 0)
+                    sum += luma[0] * out[0] + luma[1] * out[1] + luma[2] * out[2]
+                }
+                return sum / count
+            }
+            // Het resultaat wordt lichter met de belichting, dus bisectie op de grootste belichting die niet boven het doel uitkomt.
+            var lo = MIN_EXPOSURE
+            var hi = cap
+            if (meanAt(hi) <= targetMean) return ToneMapper(peak, hi, t.knee.toFloat(), 0.5f, luma)
+            repeat(14) {
+                val mid = (lo + hi) / 2
+                if (meanAt(mid) > targetMean) hi = mid else lo = mid
+            }
+            return ToneMapper(peak, lo, t.knee.toFloat(), 0.5f, luma)
+        }
     }
 }
 

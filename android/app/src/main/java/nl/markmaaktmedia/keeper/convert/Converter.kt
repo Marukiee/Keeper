@@ -54,44 +54,63 @@ class Converter(private val stripRows: Int = 256, private val log: (String) -> U
 
         // Eerste pass: de piek van de inhoud, op een verkleind beeld.
         val sample = when { w.toLong() * h >= 40_000_000L -> 4; w.toLong() * h >= 8_000_000L -> 2; else -> 1 }
-        val (peak, space) = measurePeak(source, layout, gain, sample, onProgress, cancelled)
+        val first = measure(source, layout, gain, sample, onProgress, cancelled)
+        val peak = first.peak
+        val space = first.space
         log("piek $peak, kleurruimte $space, ${(System.nanoTime() - t0) / 1_000_000} ms")
 
         val luma = if (space.contains("P3", ignoreCase = true)) ToneMapper.LUMA_P3 else ToneMapper.LUMA_SRGB
-        val mapper = ToneMapper.of(settings.toneMap, peak, luma)
+        // De belichting volgt de camera: de foto komt even helder uit als de SDR-versie die de camera zelf maakte (zie ToneMapper.matching).
+        val mapper = ToneMapper.matching(settings.toneMap, peak, luma, first.samples, first.sampleCount, first.baseMean)
         val sampler = GainMapSampler(layout.meta, gain, w, h)
         val segments = segmentsFor(layout.primary, layout, space)
-        val encoder = JpegEncoder(out, w, h, settings.jpegQuality, settings.chroma420, segments)
 
-        val regionFd = source.open()
-        val decoder = BitmapRegionDecoder.newInstance(regionFd)
-        // Pixelstap parallel over rijen, en het coderen loopt op een eigen thread terwijl de volgende strook gedecodeerd wordt.
+        // Vier trappen naast elkaar: een thread decodeert de volgende strook, de pixelstap rekent de huidige over meerdere threads, en het
+        // coderen (JPEG, per MCU-rij los) loopt op zijn eigen pool terwijl de volgende strook wordt voorbereid.
         val workers = Runtime.getRuntime().availableProcessors().coerceIn(1, 4)
+        val regionFd = source.open()
+        val decoder = try { BitmapRegionDecoder.newInstance(regionFd) } catch (t: Throwable) { regionFd.close(); throw t }
         val pool = Executors.newFixedThreadPool(workers)
+        val encodePool = Executors.newFixedThreadPool(workers)
         val encodeThread = Executors.newSingleThreadExecutor()
+        val decodeThread = Executors.newSingleThreadExecutor()
         val scratches = List(workers) { Scratch(w, sampler.newScratch()) }
         val buffers = Array(2) { ByteArray(w * 3 * stripRows) }
         val encoding = arrayOfNulls<Future<*>>(2)
+        // Twee ruwe stroken: de ene wordt gedecodeerd terwijl de andere gerekend wordt.
+        val raws = Array(2) { ByteArray(0) }
+        val opts = BitmapFactory.Options().apply { inPreferredConfig = Bitmap.Config.ARGB_8888 }
+        val strips = (h + stripRows - 1) / stripRows
+        var upcoming: Future<Int>? = null
         try {
-            val opts = BitmapFactory.Options().apply { inPreferredConfig = Bitmap.Config.ARGB_8888 }
-            var raw = ByteArray(0)
-            var y0 = 0
-            var k = 0
-            var tDecode = 0L; var tPixels = 0L; var tWait = 0L
-            while (y0 < h) {
-                if (cancelled()) throw CancellationException("afgebroken")
+            val encoder = JpegEncoder(out, w, h, settings.jpegQuality, settings.chroma420, segments, encodePool)
+            /** Decodeert strook [k] in [raws] en geeft de rijlengte in bytes terug. */
+            fun decodeStrip(k: Int): Future<Int> = decodeThread.submit<Int> {
+                val y0 = k * stripRows
                 val y1 = minOf(y0 + stripRows, h)
-                var t = System.nanoTime()
                 val bmp = decoder.decodeRegion(Rect(0, y0, w, y1), opts) ?: error("strook $y0 niet te decoderen")
                 check(bmp.width == w && bmp.height == y1 - y0) { "strook heeft ${bmp.width}x${bmp.height}, verwacht ${w}x${y1 - y0}" }
                 val rowBytes = bmp.rowBytes
-                if (raw.size < rowBytes * bmp.height) raw = ByteArray(rowBytes * bmp.height)
-                bmp.copyPixelsToBuffer(ByteBuffer.wrap(raw))
+                if (raws[k % 2].size < rowBytes * bmp.height) raws[k % 2] = ByteArray(rowBytes * bmp.height)
+                bmp.copyPixelsToBuffer(ByteBuffer.wrap(raws[k % 2]))
                 bmp.recycle()
-                tDecode += System.nanoTime() - t; t = System.nanoTime()
-                val buf = buffers[k % 2]
-                encoding[k % 2]?.get() // de vorige keer dat deze buffer naar de encoder ging moet klaar zijn
+                rowBytes
+            }
+            var tWait = 0L; var tPixels = 0L; var tEncoder = 0L
+            upcoming = decodeStrip(0)
+            for (k in 0 until strips) {
+                if (cancelled()) throw CancellationException("afgebroken")
+                val y0 = k * stripRows
+                val y1 = minOf(y0 + stripRows, h)
+                var t = System.nanoTime()
+                val rowBytes = upcoming!!.await()
+                // Pas nu, als strook k klaar is, mag strook k + 1 in de andere buffer beginnen.
+                upcoming = if (k + 1 < strips) decodeStrip(k + 1) else null
                 tWait += System.nanoTime() - t; t = System.nanoTime()
+                val raw = raws[k % 2]
+                val buf = buffers[k % 2]
+                encoding[k % 2]?.await() // de vorige keer dat deze buffer naar de encoder ging moet klaar zijn
+                tEncoder += System.nanoTime() - t; t = System.nanoTime()
                 val rows = y1 - y0
                 val chunk = (rows + workers - 1) / workers
                 val tasks = (0 until workers).mapNotNull { i ->
@@ -99,19 +118,22 @@ class Converter(private val stripRows: Int = 256, private val log: (String) -> U
                     val r1 = minOf(r0 + chunk, rows)
                     if (r0 >= r1) null else pool.submit { pixels(raw, rowBytes, y0, r0, r1, w, sampler, mapper, scratches[i], buf) }
                 }
-                tasks.forEach { it.get() }
+                tasks.forEach { it.await() }
                 tPixels += System.nanoTime() - t
                 encoding[k % 2] = encodeThread.submit { encoder.writeRows(buf, 0, rows) }
-                y0 = y1
-                k++
-                onProgress(0.1f + 0.9f * y0 / h)
+                onProgress(0.1f + 0.9f * y1 / h)
             }
-            encoding.forEach { it?.get() }
+            encoding.forEach { it?.await() }
             encoder.finish()
-            log("tijd: decoderen ${tDecode / 1_000_000} ms, pixels ${tPixels / 1_000_000} ms, wachten op encoder ${tWait / 1_000_000} ms")
+            log("tijd: wachten op decoderen ${tWait / 1_000_000} ms, pixels ${tPixels / 1_000_000} ms, wachten op encoder ${tEncoder / 1_000_000} ms")
         } finally {
+            // Eerst laten uitlopen wat nog decodeert: de decoder mag niet vrijgegeven worden terwijl een thread hem nog gebruikt.
+            decodeThread.shutdown()
+            runCatching { upcoming?.get() }
+            decodeThread.awaitTermination(30, java.util.concurrent.TimeUnit.SECONDS)
             pool.shutdownNow()
             encodeThread.shutdownNow()
+            encodePool.shutdownNow()
             decoder.recycle()
             regionFd.close()
         }
@@ -119,6 +141,10 @@ class Converter(private val stripRows: Int = 256, private val log: (String) -> U
         log("klaar in $ms ms")
         return ConvertResult(w, h, peak, "${gain.width}x${gain.height}x${gain.channels}", space, ms)
     }
+
+    private companion object { const val SAMPLE_STEP = 4 }
+
+    private fun <T> Future<T>.await(): T = try { get() } catch (e: java.util.concurrent.ExecutionException) { throw e.cause ?: e }
 
     private class Scratch(width: Int, val gain: FloatArray) { val sdr = FloatArray(width * 3) }
 
@@ -195,11 +221,17 @@ class Converter(private val stripRows: Int = 256, private val log: (String) -> U
         return GainMapImage(gw, gh, ch, data)
     }
 
+    /**
+     * Wat de eerste pass over het verkleinde beeld oplevert: de piek, de kleurruimte, en een steekproef van de lineaire HDR-pixels met de
+     * gemiddelde luminantie van dezelfde pixels in de SDR-versie van de camera (de basis, voor de gain map erop komt).
+     */
+    private class Measured(val peak: Float, val space: String, val samples: FloatArray, val sampleCount: Int, val baseMean: Double)
+
     /** Piek uit het 99,95e percentiel van de luminantie van de gereconstrueerde HDR, op een verkleind beeld. */
-    private fun measurePeak(
+    private fun measure(
         source: JpegSource, layout: UltraHdrLayout, gain: GainMapImage, sample: Int,
         onProgress: (Float) -> Unit, cancelled: () -> Boolean,
-    ): Pair<Float, String> {
+    ): Measured {
         val opts = BitmapFactory.Options().apply { inPreferredConfig = Bitmap.Config.ARGB_8888; inSampleSize = sample }
         val bmp = open(source) { fd -> BitmapFactory.decodeFileDescriptor(fd.fileDescriptor, null, opts) } ?: error("verkleind beeld niet te decoderen")
         val space = bmp.colorSpace?.name ?: "onbekend"
@@ -213,6 +245,10 @@ class Converter(private val stripRows: Int = 256, private val log: (String) -> U
         bmp.copyPixelsToBuffer(ByteBuffer.wrap(raw))
         bmp.recycle()
         val row = FloatArray(bw * 3)
+        // Elke vierde pixel van elke vierde rij: een paar honderdduizend punten, genoeg voor een gemiddelde.
+        val samples = FloatArray(((bw + SAMPLE_STEP - 1) / SAMPLE_STEP) * ((bh + SAMPLE_STEP - 1) / SAMPLE_STEP) * 3)
+        var sampleCount = 0
+        var baseSum = 0.0
         for (y in 0 until bh) {
             if (y % 64 == 0) {
                 if (cancelled()) throw CancellationException("afgebroken")
@@ -225,9 +261,15 @@ class Converter(private val stripRows: Int = 256, private val log: (String) -> U
                 row[x * 3 + 2] = Srgb.toLinear[raw[p + 2].toInt() and 0xFF]
                 p += 4
             }
+            val sampled = y % SAMPLE_STEP == 0
+            if (sampled) for (x in 0 until bw step SAMPLE_STEP) baseSum += luma[0] * row[x * 3] + luma[1] * row[x * 3 + 1] + luma[2] * row[x * 3 + 2]
             sampler.hdrRow(y, row, row)
             for (x in 0 until bw) hist.add(luma[0] * row[x * 3] + luma[1] * row[x * 3 + 1] + luma[2] * row[x * 3 + 2])
+            if (sampled) for (x in 0 until bw step SAMPLE_STEP) {
+                samples[sampleCount * 3] = row[x * 3]; samples[sampleCount * 3 + 1] = row[x * 3 + 1]; samples[sampleCount * 3 + 2] = row[x * 3 + 2]
+                sampleCount++
+            }
         }
-        return hist.peak() to space
+        return Measured(hist.peak(), space, samples, sampleCount, if (sampleCount > 0) baseSum / sampleCount else 0.0)
     }
 }
