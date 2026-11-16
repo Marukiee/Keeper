@@ -151,3 +151,31 @@ def self_test(folder):
 if __name__ == "__main__":
     import sys
     print("echte tabellen heen en terug goed:", self_test(sys.argv[1]))
+
+
+# ---- Look in de XMP van een DNG (zo leest Lightroom mobile hem; plat bovenaan werkt niet, zie CLAUDE.md) ----
+# Gemeten met een testfoto in Lightroom mobile 11.5.31: kop-waarden van de tabel
+#   primaries: 0 sRGB, 1 Adobe RGB, 2 ProPhoto, 3 Display P3, 4 Rec.2020
+#   gamma:     0 lineair, 1 sRGB-curve, 2 gamma 1,8, 3 gamma 2,2
+# De tabel werkt op het eindbeeld (na toon en kleur van Lightroom) in de gekozen ruimte.
+PRIMARIES_SRGB, PRIMARIES_ADOBE, PRIMARIES_PROPHOTO, PRIMARIES_P3, PRIMARIES_REC2020 = 0, 1, 2, 3, 4
+GAMMA_LINEAR, GAMMA_SRGB, GAMMA_18, GAMMA_22 = 0, 1, 2, 3
+
+CRS_NS = 'xmlns:crs="http://ns.adobe.com/camera-raw-settings/1.0/"'
+
+
+def dng_look_description(name, nodes, look_uuid, extra_settings="", group="Keeper", amount=1.0,
+                         primaries=PRIMARIES_P3, gamma=GAMMA_SRGB, version="18.4", process="15.4"):
+    """rdf:Description voor in de XMP van een DNG: Look met RGB-tabel, plus eventuele losse instellingen (bijv. vignet)."""
+    tid, text = encode_table(nodes, primaries=primaries, gamma=gamma)
+    return f'''<rdf:Description rdf:about="" {CRS_NS}
+   crs:Version="{version}" crs:ProcessVersion="{process}" crs:HasSettings="True" {extra_settings}
+   crs:Table_{tid}="{text}">
+   <crs:Look>
+    <rdf:Description crs:Name="{name}" crs:Amount="{amount:.6f}" crs:UUID="{look_uuid}" crs:SupportsAmount="True" crs:SupportsColor="True" crs:SupportsMonochrome="True" crs:SupportsHighDynamicRange="True" crs:SupportsNormalDynamicRange="True" crs:SupportsSceneReferred="True" crs:SupportsOutputReferred="True" crs:Group="{group}">
+     <crs:Parameters>
+      <rdf:Description crs:Version="{version}" crs:ProcessVersion="{process}" crs:ConvertToGrayscale="False" crs:RGBTable="{tid}" crs:RGBTableAmount="1.000000"/>
+     </crs:Parameters>
+    </rdf:Description>
+   </crs:Look>
+  </rdf:Description>'''
