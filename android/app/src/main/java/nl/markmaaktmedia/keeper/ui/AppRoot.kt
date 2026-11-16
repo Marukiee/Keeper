@@ -48,11 +48,12 @@ import nl.markmaaktmedia.keeper.MainViewModel
 import nl.markmaaktmedia.keeper.R
 import nl.markmaaktmedia.keeper.graph
 import nl.markmaaktmedia.keeper.scan.Status
+import nl.markmaaktmedia.keeper.ui.settings.SettingsPage
 import nl.markmaaktmedia.keeper.ui.components.PillNavItem
 import nl.markmaaktmedia.keeper.ui.components.PillNavigationBar
 import nl.markmaaktmedia.keeper.ui.theme.KeeperIcons
 
-private enum class Sub { None, Viewer, Overview, Updates }
+private enum class Sub { None, Viewer, Overview, Page }
 
 /** De foto's die het groot-bekijken-scherm doorloopt, vast bij het openen. */
 private data class ViewerRequest(val ids: List<Long>, val startId: Long)
@@ -64,6 +65,8 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var filter by rememberSaveable { mutableIntStateOf(0) }
     var sub by remember { mutableStateOf(Sub.None) }
+    // De instellingenpagina die open staat als sub Page is.
+    var page by remember { mutableStateOf(SettingsPage.Look) }
     var viewer by remember { mutableStateOf<ViewerRequest?>(null) }
     // De foto die de viewer nu toont, en waar de tegels staan: voor de vlucht van de foto terug naar zijn tegel.
     var viewerCurrent by remember { mutableStateOf<Long?>(null) }
@@ -91,7 +94,9 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
     LaunchedEffect(permitted) { if (permitted) vm.refresh() }
     LaunchedEffect(Unit) { context.graph.updater.checkIfDue() }
 
-    BackHandler(enabled = sub != Sub.None) { sub = Sub.None }
+    // Uiterlijk hoort bij Uiterlijk en taal en gaat daarheen terug; elke andere pagina gaat terug naar het overzicht.
+    val pageBack: () -> Unit = { if (page == SettingsPage.Appearance) page = SettingsPage.Look else sub = Sub.None }
+    BackHandler(enabled = sub != Sub.None) { if (sub == Sub.Page) pageBack() else sub = Sub.None }
 
     val needsEdit = state.photos.count { it.status == Status.NeedsEdit }
     val items = listOf(
@@ -105,14 +110,14 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
         // De galerij blijft onder de viewer staan (de viewer ligt er als laag overheen), zodat je hem tijdens het naar beneden
         // slepen langzaam terug ziet komen, en op dezelfde plek van de lijst staat als je terugkomt.
         AnimatedContent(
-            targetState = (if (sub == Sub.Viewer) Sub.None else sub) to tab,
+            targetState = Triple(if (sub == Sub.Viewer) Sub.None else sub, tab, if (sub == Sub.Page) page else null),
             transitionSpec = { (slideInVertically { it / 12 } + fadeIn()) togetherWith fadeOut() },
             label = "screen",
-        ) { (currentSub, currentTab) ->
+        ) { (currentSub, currentTab, currentPage) ->
             when (currentSub) {
                 Sub.Viewer -> Unit
                 Sub.Overview -> TodayScreen(state, permitted, { ask.launch(Manifest.permission.READ_MEDIA_IMAGES) }, { tab = 1; sub = Sub.None }, { sub = Sub.None }, padding)
-                Sub.Updates -> UpdatesScreen({ sub = Sub.None }, padding)
+                Sub.Page -> SettingsPageScreen(currentPage ?: SettingsPage.Look, { page = it }, pageBack, padding)
                 Sub.None -> when (currentTab) {
                     0 -> GalleryScreen(
                         state, GalleryFilter.entries[filter], { filter = it.ordinal }, permitted, { ask.launch(Manifest.permission.READ_MEDIA_IMAGES) },
@@ -126,7 +131,7 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
                         hiddenId = if (sub == Sub.Viewer) viewerCurrent else null,
                     )
                     1 -> EditScreen(state.photos, { photo, use -> vm.useCameraVersion(photo, use) }, { photo -> trash(listOf(photo)) }, padding)
-                    else -> SettingsScreen({ sub = Sub.Updates }, padding)
+                    else -> SettingsScreen({ page = it; sub = Sub.Page }, padding)
                 }
             }
         }

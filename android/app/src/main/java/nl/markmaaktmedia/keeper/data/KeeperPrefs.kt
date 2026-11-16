@@ -12,6 +12,10 @@ import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import nl.markmaaktmedia.keeper.ui.theme.Appearance
+import nl.markmaaktmedia.keeper.ui.theme.ColourSeed
+import nl.markmaaktmedia.keeper.ui.theme.PaletteStyle
+import nl.markmaaktmedia.keeper.ui.theme.ThemeMode
 
 private val Context.store by preferencesDataStore("keeper")
 
@@ -35,6 +39,10 @@ class KeeperPrefs(private val context: Context) {
         val quality = intPreferencesKey("jpeg_quality")
         val toneMap = stringPreferencesKey("tone_map")
         val lookDefault = stringPreferencesKey("look_default")
+        val themeMode = stringPreferencesKey("theme_mode")
+        val seed = stringPreferencesKey("seed")
+        val style = stringPreferencesKey("palette_style")
+        val pureBlack = booleanPreferencesKey("pure_black")
     }
 
     val autoUpdateCheck: Flow<Boolean> = data.map { it[K.autoUpdate] ?: true }
@@ -112,6 +120,20 @@ class KeeperPrefs(private val context: Context) {
     /** Preset die Lightroom over een RAW krijgt als de camera-JPG ernaast niet zegt welke het was ("" is geen). Zie `LookPreset`. */
     val lookDefault: Flow<String> = data.map { it[K.lookDefault] ?: "" }
     suspend fun setLookDefault(id: String) = edit { it[K.lookDefault] = id }
+
+    /** Hoe de app eruitziet. Puur zwart (voor OLED) staat standaard uit: donker is dan het gewone donkergrijs van Material. */
+    val appearance: Flow<Appearance> = data.map { p ->
+        Appearance(
+            mode = p[K.themeMode]?.let { runCatching { ThemeMode.valueOf(it) }.getOrNull() } ?: ThemeMode.SYSTEM,
+            seed = ColourSeed.fromKey(p[K.seed]),
+            style = PaletteStyle.fromKey(p[K.style]),
+            pureBlack = p[K.pureBlack] ?: false,
+        )
+    }.distinctUntilChanged()
+    suspend fun setThemeMode(mode: ThemeMode) = edit { it[K.themeMode] = mode.name }
+    suspend fun setSeed(seed: ColourSeed) = edit { it[K.seed] = seed.storageKey }
+    suspend fun setStyle(style: PaletteStyle) = edit { it[K.style] = style.storageKey }
+    suspend fun setPureBlack(on: Boolean) = edit { it[K.pureBlack] = on }
 
     private suspend fun edit(block: (androidx.datastore.preferences.core.MutablePreferences) -> Unit) {
         context.store.edit { block(it) }

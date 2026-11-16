@@ -70,9 +70,7 @@
     <string name="settings_cshot_sub">The Cshot folder in DCIM/Camera</string>
     <string name="settings_convert">Converting</string>
     <string name="settings_quality">Quality</string>
-    <string name="settings_quality_value">jpegli, q94</string>
     <string name="settings_tonemap">Tone map</string>
-    <string name="settings_tonemap_value">Normal</string>
     <string name="settings_app">App</string>
     <string name="settings_language">Language</string>
     <string name="language_english" translatable="false">English</string>
@@ -151,4 +149,21 @@
     <string name="edited_keep_only">Edited version</string>
     <string name="edited_keep_original">Original</string>
     <string name="edited_keep_both">Both</string>
+    <!-- Settings: categories and appearance -->
+    <string name="settings_look">Look and language</string>
+    <string name="settings_appearance">Appearance</string>
+    <string name="settings_appearance_sub">Accent colour and palette style</string>
+    <string name="settings_updates_summary">Version %1$s</string>
+    <string name="settings_updates_summary_available">Version %1$s, update available</string>
+    <string name="settings_folders_summary">%1$s</string>
+    <string name="settings_convert_summary">q%1$d, %2$s</string>
+    <string name="appearance_theme">Theme</string>
+    <string name="appearance_mode">Light or dark</string>
+    <string name="appearance_system">System</string>
+    <string name="appearance_light">Light</string>
+    <string name="appearance_dark">Dark</string>
+    <string name="appearance_black">Pure black</string>
+    <string name="appearance_black_sub">For OLED screens, saves a little battery. Off by default.</string>
+    <string name="appearance_accent">Accent</string>
+    <string name="appearance_style">Palette style</string>
 </resources>

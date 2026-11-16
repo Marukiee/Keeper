@@ -70,9 +70,7 @@
     <string name="settings_cshot_sub">De map Cshot in DCIM/Camera</string>
     <string name="settings_convert">Omzetten</string>
     <string name="settings_quality">Kwaliteit</string>
-    <string name="settings_quality_value">jpegli, q94</string>
     <string name="settings_tonemap">Tone map</string>
-    <string name="settings_tonemap_value">Normaal</string>
     <string name="settings_app">App</string>
     <string name="settings_language">Taal</string>
     <string name="settings_updates_sub">Versie, controleren op een nieuwe</string>
@@ -149,4 +147,21 @@
     <string name="edited_keep_only">Bewerkte versie</string>
     <string name="edited_keep_original">Origineel</string>
     <string name="edited_keep_both">Allebei</string>
+    <!-- Instellingen: categorieën en uiterlijk -->
+    <string name="settings_look">Uiterlijk en taal</string>
+    <string name="settings_appearance">Uiterlijk</string>
+    <string name="settings_appearance_sub">Accentkleur en paletstijl</string>
+    <string name="settings_updates_summary">Versie %1$s</string>
+    <string name="settings_updates_summary_available">Versie %1$s, update beschikbaar</string>
+    <string name="settings_folders_summary">%1$s</string>
+    <string name="settings_convert_summary">q%1$d, %2$s</string>
+    <string name="appearance_theme">Thema</string>
+    <string name="appearance_mode">Licht of donker</string>
+    <string name="appearance_system">Systeem</string>
+    <string name="appearance_light">Licht</string>
+    <string name="appearance_dark">Donker</string>
+    <string name="appearance_black">Puur zwart</string>
+    <string name="appearance_black_sub">Voor OLED-schermen, spaart een beetje batterij. Standaard uit.</string>
+    <string name="appearance_accent">Accent</string>
+    <string name="appearance_style">Paletstijl</string>
 </resources>
