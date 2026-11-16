@@ -35,9 +35,13 @@ fun WavyProgress(
         val middle = size.height / 2
         val line = stroke.toPx()
         val reach = (width * fraction.coerceIn(0f, 1f)).coerceAtLeast(line)
-        // The part still to do.
-        if (reach < width) {
-            drawLine(trackColor, Offset(reach, middle), Offset(width, middle), strokeWidth = line, cap = StrokeCap.Round)
+        // The part still to do. As in Material 3 Expressive it does not touch the wave: there is a gap of a few dp between the two round
+        // ends, and a small dot marks where the track stops.
+        val gap = GAP.toPx()
+        val trackStart = reach + line + gap
+        if (trackStart < width - line / 2) {
+            drawLine(trackColor, Offset(trackStart, middle), Offset(width - line / 2, middle), strokeWidth = line, cap = StrokeCap.Round)
+            drawCircle(color, radius = line * 0.3f, center = Offset(width - line / 2, middle))
         }
         // The part that is done, as a wave that is flat where it starts and where it ends, so it does not jump at the ends.
         val path = Path()
@@ -54,3 +58,6 @@ fun WavyProgress(
         drawPath(path, color, style = Stroke(width = line, cap = StrokeCap.Round))
     }
 }
+
+/** Space between the end of the wave and the start of the straight track. */
+private val GAP = 4.dp
