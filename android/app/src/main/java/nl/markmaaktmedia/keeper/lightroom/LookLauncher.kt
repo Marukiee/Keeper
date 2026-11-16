@@ -27,21 +27,32 @@ object LookLauncher {
     private const val NEIGHBOUR_MS = 3 * 60_000L
     private const val MAX_COPIES = 3
 
-    /** Welke preset hoort bij deze RAW? De naam staat niet in een DNG, dus kijken we naar de camera-JPG die er kort naast is genomen. */
-    suspend fun guess(context: Context, photo: Photo, all: List<Photo>): LookPreset? = withContext(Dispatchers.IO) {
+    /**
+     * Uitkomst van het raden. [preset] is de look om te gebruiken (null: geen). [oppoName] is wat de JPG's zeiden (leeg: geen preset), null als dat
+     * niet te zeggen was; dan geldt de standaard uit Instellingen. [missing] is de naam van een preset die de JPG's noemen maar waar Keeper nog geen look voor heeft.
+     */
+    class Guess(val preset: LookPreset?, val oppoName: String?, val missing: String? = null)
+
+    /** Welke preset hoort bij deze RAW? De naam staat niet in een DNG, dus kijken we naar de camera-JPG's die er kort naast zijn genomen. */
+    suspend fun guess(context: Context, photo: Photo, all: List<Photo>): Guess = withContext(Dispatchers.IO) {
         val t = photo.takenMs
-        all.asSequence()
-            .filter { it.item.isJpeg && abs(it.takenMs - t) <= NEIGHBOUR_MS }
+        val neighbours = all.asSequence()
+            .filter { it.item.isJpeg && abs(it.takenMs - t) <= PresetGuess.WINDOW_MS }
             .sortedBy { abs(it.takenMs - t) }
-            .take(3)
-            .mapNotNull { presetOf(context, it) }
-            .firstOrNull()
+            .take(6)
+            .mapNotNull { jpeg -> presetNameOf(context, jpeg)?.let { PresetGuess.Neighbour(jpeg.takenMs, it.ifEmpty { null }) } }
+            .toList()
+        val name = PresetGuess.decide(t, neighbours) ?: return@withContext Guess(null, null)
+        if (name.isEmpty()) return@withContext Guess(null, "")
+        val preset = LookPreset.fromOppo(name)
+        if (preset != null && preset in LookPreset.available(context)) Guess(preset, name) else Guess(null, name, missing = name)
     }
 
-    private fun presetOf(context: Context, jpeg: Photo): LookPreset? = try {
+    /** De presetnaam uit de trailer van [jpeg], "" als er geen preset was, null als het bestand niet te lezen is. */
+    private fun presetNameOf(context: Context, jpeg: Photo): String? = try {
         context.contentResolver.openFileDescriptor(MediaScanner.imageUri(jpeg.item.id), "r")?.use { pfd ->
-            FileInputStream(pfd.fileDescriptor).use { OppoTrailer.presetName(it.channel) }
-        }?.let { LookPreset.fromOppo(it) }
+            FileInputStream(pfd.fileDescriptor).use { OppoTrailer.presetName(it.channel).orEmpty() }
+        }
     } catch (_: Exception) { null }
 
     /** Opent [photo] in Lightroom met [preset]; zonder preset (of als het misgaat) het origineel, zoals voorheen. */

@@ -55,12 +55,15 @@ fun EditScreen(photos: List<Photo>, onCameraVersion: (Photo, Boolean) -> Unit, o
     val defaultId by context.graph.prefs.lookDefault.collectAsState(initial = "")
     val presets = remember { LookPreset.available(context) }
     // Per RAW de preset van de camera-JPG die er kort naast is genomen (een DNG zelf zegt het niet); Mark kan hem per foto aanpassen.
-    val guesses by produceState(emptyMap<Long, LookPreset?>(), list.map { it.item.id }) {
+    val guesses by produceState(emptyMap<Long, LookLauncher.Guess>(), list.map { it.item.id }) {
         value = list.filter { it.item.isDng }.associate { it.item.id to LookLauncher.guess(context, it, photos) }
     }
     val picked = remember { mutableStateMapOf<Long, String>() }
-    fun effective(photo: Photo): LookPreset? =
-        picked[photo.item.id]?.let { LookPreset.of(it) } ?: if (picked.containsKey(photo.item.id)) null else guesses[photo.item.id] ?: LookPreset.of(defaultId)
+    fun effective(photo: Photo): LookPreset? {
+        picked[photo.item.id]?.let { return LookPreset.of(it) }
+        val g = guesses[photo.item.id] ?: return null
+        return if (g.oppoName != null) g.preset else LookPreset.of(defaultId)
+    }
     LazyColumn(Modifier.fillMaxWidth(), contentPadding = contentPadding, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { ScreenHeader(stringResource(R.string.edit_title), stringResource(R.string.edit_sub)) }
         if (list.isEmpty()) item {
@@ -82,7 +85,7 @@ fun EditScreen(photos: List<Photo>, onCameraVersion: (Photo, Boolean) -> Unit, o
                         }
                         KeeperIconButton(KeeperIcons.Delete, stringResource(R.string.review_trash), { onTrash(photo) }, tint = MaterialTheme.colorScheme.error)
                     }
-                    if (photo.item.isDng && presets.isNotEmpty()) PresetPicker(effective(photo), presets) { picked[photo.item.id] = it }
+                    if (photo.item.isDng && presets.isNotEmpty()) PresetPicker(effective(photo), presets, if (picked.containsKey(photo.item.id)) null else guesses[photo.item.id]?.missing) { picked[photo.item.id] = it }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         SecondaryPillButton(stringResource(R.string.edit_open), { scope.launch { LookLauncher.open(context, photo, effective(photo)) } }, Modifier.weight(1f), icon = KeeperIcons.OpenInNew)
                         if (chosen) SecondaryPillButton(stringResource(R.string.edit_camera_undo), { onCameraVersion(photo, false) }, Modifier.weight(1f))
@@ -96,11 +99,14 @@ fun EditScreen(photos: List<Photo>, onCameraVersion: (Photo, Boolean) -> Unit, o
 
 /** Kiest de Lightroom-preset voor één RAW. "" betekent: geen preset. */
 @Composable
-private fun PresetPicker(selected: LookPreset?, presets: List<LookPreset>, onPick: (String) -> Unit) {
+private fun PresetPicker(selected: LookPreset?, presets: List<LookPreset>, missing: String?, onPick: (String) -> Unit) {
     var open by remember { mutableStateOf(false) }
     Box {
         TextButton(onClick = { open = true }) {
-            Text(stringResource(R.string.edit_preset, selected?.label ?: stringResource(R.string.look_none)))
+            Text(
+                if (missing != null) stringResource(R.string.edit_preset_missing, missing)
+                else stringResource(R.string.edit_preset, selected?.label ?: stringResource(R.string.look_none)),
+            )
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             DropdownMenuItem(text = { Text(stringResource(R.string.look_none)) }, onClick = { open = false; onPick("") })
@@ -111,5 +117,8 @@ private fun PresetPicker(selected: LookPreset?, presets: List<LookPreset>, onPic
 
 /** Opent de RAW in Lightroom met de preset die bij de foto past (JPG ernaast) of de standaardpreset uit de instellingen. */
 internal fun openInLightroom(scope: CoroutineScope, context: Context, photo: Photo, all: List<Photo>, defaultId: String) {
-    scope.launch { LookLauncher.open(context, photo, LookLauncher.guess(context, photo, all) ?: LookPreset.of(defaultId)) }
+    scope.launch {
+        val g = LookLauncher.guess(context, photo, all)
+        LookLauncher.open(context, photo, if (g.oppoName != null) g.preset else LookPreset.of(defaultId))
+    }
 }
