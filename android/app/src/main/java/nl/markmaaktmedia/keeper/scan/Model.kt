@@ -67,6 +67,11 @@ data class Photo(val item: MediaItem, val status: Status, val hdr: Boolean, val 
     val selected get() = goesAlong
     /** Bewaard: gaat mee. Hetzelfde als [selected], maar zonder de verwarring met de selectie in de galerij. */
     val kept get() = goesAlong
+    /**
+     * Bestaat er al een bewerkte versie (die meegaat) terwijl dit origineel zelf niet bewaard is? Bewaren zou dan een tweede versie van dezelfde
+     * foto geven (de camera-versie naast de Lightroom-export), dus daar vraagt de app eerst naar.
+     */
+    val askBeforeKeeping get() = edit != Edit.None && !goesAlong
     /** Bewust niet bewaard (kruisknop): krijgt een kruisje in de galerij. */
     val discarded get() = rejected && selectable && !goesAlong
     /**

@@ -10,6 +10,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 
 private val Context.store by preferencesDataStore("keeper")
@@ -17,6 +18,8 @@ private val Context.store by preferencesDataStore("keeper")
 /** Alle instellingen en keuzes van Mark. Niets hiervan wijzigt ooit een foto. */
 class KeeperPrefs(private val context: Context) {
     private val data get() = context.store.data
+    /** Zonder ingestelde datum: zeven dagen terug vanaf het opstarten. Eén vaste waarde per start, zodat een scan niet elke keer een andere vraag stelt. */
+    private val defaultSince = System.currentTimeMillis() - 7 * DAY_MS
 
     private object K {
         val autoUpdate = booleanPreferencesKey("auto_update_check")
@@ -42,21 +45,21 @@ class KeeperPrefs(private val context: Context) {
     suspend fun setDismissedUpdate(tag: String) = edit { it[K.dismissed] = tag }
 
     /** Bestandsnamen die Mark heeft overgeslagen (naar links geveegd). De naam is uniek in DCIM/Camera. */
-    val skipped: Flow<Set<String>> = data.map { it[K.skipped] ?: emptySet() }
+    val skipped: Flow<Set<String>> = data.map { it[K.skipped] ?: emptySet() }.distinctUntilChanged()
     suspend fun setSkipped(name: String, skip: Boolean) = edit {
         val now = it[K.skipped] ?: emptySet()
         it[K.skipped] = if (skip) now + name else now - name
     }
 
     /** Bestandsnamen die Mark bewaart (JPG) of waarvan hij de camera-versie van de RAW wil gebruiken (IFD0 van de DNG). */
-    val cameraVersion: Flow<Set<String>> = data.map { it[K.cameraVersion] ?: emptySet() }
+    val cameraVersion: Flow<Set<String>> = data.map { it[K.cameraVersion] ?: emptySet() }.distinctUntilChanged()
     suspend fun setCameraVersion(name: String, use: Boolean) = edit {
         val now = it[K.cameraVersion] ?: emptySet()
         it[K.cameraVersion] = if (use) now + name else now - name
     }
 
     /** Alles wat later is toegevoegd telt als nieuw. Standaard zeven dagen terug, na een gelukte run het eindmoment. */
-    val sinceMs: Flow<Long> = data.map { it[K.since] ?: (System.currentTimeMillis() - 7 * DAY_MS) }
+    val sinceMs: Flow<Long> = data.map { it[K.since] ?: defaultSince }
     suspend fun setSinceMs(ms: Long) = edit { it[K.since] = ms }
 
     val outputFolder: Flow<String> = data.map { it[K.outputFolder] ?: "Pictures/Keeper/" }
@@ -82,7 +85,16 @@ class KeeperPrefs(private val context: Context) {
      * Bewust niet bewaren (de kruisknop in Bekijken): gaat niet mee en krijgt een kruisje, om te zien dat je er al naar gekeken hebt.
      * Het verschil met gewoon uitgezet is alleen het kruisje; Opruimen verandert er niet van.
      */
-    val rejected: Flow<Set<String>> = data.map { it[K.rejected] ?: emptySet() }
+    val rejected: Flow<Set<String>> = data.map { it[K.rejected] ?: emptySet() }.distinctUntilChanged()
+    /**
+     * Het kruisje weer weghalen (nog een keer op "niet bewaren" tikken). Wat standaard aanstaat (Lightroom-export, Galerij-bewerking) gaat
+     * dan ook weer aan; de rest blijft niet bewaard, maar zonder kruisje.
+     */
+    suspend fun undoReject(keep: List<String>, exclude: List<String>) = edit {
+        it[K.rejected] = (it[K.rejected] ?: emptySet()) - keep.toSet() - exclude.toSet()
+        it[K.skipped] = (it[K.skipped] ?: emptySet()) - exclude.toSet()
+    }
+
     suspend fun reject(keep: List<String>, exclude: List<String>) = edit {
         it[K.cameraVersion] = (it[K.cameraVersion] ?: emptySet()) - keep.toSet()
         it[K.skipped] = (it[K.skipped] ?: emptySet()) + exclude
@@ -90,7 +102,7 @@ class KeeperPrefs(private val context: Context) {
     }
 
     /** JPEG-kwaliteit voor het omzetten (jpegli). Fase 0: q94 zit tussen q93 en q95 in. */
-    val quality: Flow<Int> = data.map { it[K.quality] ?: 94 }
+    val quality: Flow<Int> = data.map { it[K.quality] ?: 94 }.distinctUntilChanged()
     suspend fun setQuality(q: Int) = edit { it[K.quality] = q }
 
     /** Naam van de tone map (zie [nl.markmaaktmedia.keeper.scan.ToneMap]). */

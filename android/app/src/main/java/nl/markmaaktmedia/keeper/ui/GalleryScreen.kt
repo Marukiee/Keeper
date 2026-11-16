@@ -38,7 +38,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.delay
@@ -170,9 +169,21 @@ fun GalleryScreen(
     }
     val labels = GalleryFilter.entries.associateWith { stringResource(it.label) }
     // Alleen wat Mark zelf beoordeelt: camera-JPG's en RAW's, niet de Lightroom-exports.
-    val reviewable = state.photos.filter { it.selectable && !it.defaultsOn }
-    val toReview = reviewable.count { !it.kept && !it.discarded }
-    val notKept = reviewable.count { it.discarded }
+    val (toReview, notKept) = remember(state.photos) {
+        val reviewable = state.photos.filter { it.selectable && !it.defaultsOn }
+        reviewable.count { !it.kept && !it.discarded } to reviewable.count { it.discarded }
+    }
+    var askEdited by remember { mutableStateOf(false) }
+    if (askEdited) {
+        val withEdit = pickedPhotos.filter { it.askBeforeKeeping }
+        EditedKeepDialog(
+            withEdit.size,
+            // Alleen de bewerkte versie: de rest wordt bewaard, de originelen met een bewerking krijgen het kruisje.
+            onEditedOnly = { askEdited = false; onKeep(pickedPhotos - withEdit.toSet()); onReject(withEdit); endSelecting() },
+            onExportToo = { askEdited = false; onKeep(pickedPhotos); endSelecting() },
+            onDismiss = { askEdited = false },
+        )
+    }
     cleanup?.let { (day, photos) ->
         CleanupDialog(day, photos, { remove -> cleanup = null; onTrashMany(remove) }, { cleanup = null })
     }
@@ -224,7 +235,8 @@ fun GalleryScreen(
                 BottomBar(
                     state, selecting, pickedPhotos, onOverview,
                     onClear = ::endSelecting,
-                    onKeep = { onKeep(pickedPhotos); endSelecting() },
+                    // Zitten er originelen met een bewerkte versie bij, dan eerst vragen of Keeper die ook zelf mag exporteren.
+                    onKeep = { if (pickedPhotos.any { it.askBeforeKeeping }) askEdited = true else { onKeep(pickedPhotos); endSelecting() } },
                     onReject = { onReject(pickedPhotos); endSelecting() },
                     onTrash = { onTrashMany(pickedPhotos); endSelecting() },
                     modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(start = 20.dp, end = 20.dp, bottom = 90.dp),
@@ -385,8 +397,8 @@ private fun PhotoGrid(
                         if (direction != 0) {
                             gridState.scrollBy(direction * speed)
                             hit(last)?.let(::extend)
-                        }
-                        delay(16)
+                            delay(16)
+                        } else delay(100)
                     }
                 }
                 try {
@@ -491,7 +503,7 @@ private fun DecisionBadge(kept: Boolean, modifier: Modifier = Modifier) {
 @Composable
 private fun Tile(photo: Photo, selecting: Boolean, picked: Boolean, hidden: Boolean, bounds: TileBounds, onToggle: () -> Unit, onOpen: () -> Unit) {
     // Voor de vlucht van de foto terug naar deze tegel (schermcoördinaten). Een tegel die uit beeld raakt, meldt zich af.
-    DisposableEffect(photo.item.id) { onDispose { bounds.rects.remove(photo.item.id) } }
+    DisposableEffect(photo.item.id) { onDispose { bounds.tiles.remove(photo.item.id) } }
     // Alleen een gekozen foto (selectie) wordt kleiner met ronde hoeken. Bewaard of niet bewaard verandert de tegel zelf niet.
     val scale by animateFloatAsState(if (picked) 0.88f else 1f, KeeperMotion.bouncy(), label = "tileScale")
     val corner by animateDpAsState(if (picked) 18.dp else 8.dp, KeeperMotion.bouncy(), label = "tileCorner")
@@ -504,7 +516,7 @@ private fun Tile(photo: Photo, selecting: Boolean, picked: Boolean, hidden: Bool
         photo.item.isDng -> R.string.tile_raw
         else -> null
     }
-    Box(Modifier.aspectRatio(1f).onGloballyPositioned { bounds.rects[photo.item.id] = it.boundsInRoot() }.bouncyClickable(role = Role.Image, onClick = onOpen)) {
+    Box(Modifier.aspectRatio(1f).onGloballyPositioned { if (bounds.tiles[photo.item.id] !== it) bounds.tiles[photo.item.id] = it }.bouncyClickable(role = Role.Image, onClick = onOpen)) {
         // Foto, vinkje, hartje en labels staan in één laag die samen kleiner wordt, zodat ze op dezelfde plek op de foto blijven.
         // Staat de foto groot open, dan is de tegel leeg: hij vliegt er bij het sluiten naar terug.
         Box(Modifier.fillMaxSize().graphicsLayer { scaleX = scale; scaleY = scale; alpha = if (hidden) 0f else 1f }) {

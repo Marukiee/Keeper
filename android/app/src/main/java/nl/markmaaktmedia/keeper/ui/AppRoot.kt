@@ -148,6 +148,7 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
                 ViewerScreen(
                     request.ids, request.startId, state.photos,
                     { photo, on -> vm.select(listOf(photo), on) }, { photo -> vm.reject(listOf(photo)) }, { photo -> trash(listOf(photo)) }, { sub = Sub.None },
+                    onUndoReject = { photo -> vm.undoReject(listOf(photo)) },
                     bounds = tileBounds, onCurrent = { viewerCurrent = it },
                 )
             }

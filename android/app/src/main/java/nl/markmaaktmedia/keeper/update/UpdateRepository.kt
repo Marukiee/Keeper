@@ -388,8 +388,8 @@ class UpdateRepository(
         private const val PREVIEW_TAG = "preview"
         private const val NOTIFICATION_ID = 4017
 
-        /** Every time the app is opened, at most once a minute so switching back and forth does not hammer GitHub. */
-        const val CHECK_INTERVAL_MS = 60 * 1000L
+        /** Opening the app checks GitHub at most once every six hours: every check wakes the radio, and the button in Settings checks on demand. */
+        const val CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000L
     }
 }
 

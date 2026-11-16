@@ -4,9 +4,11 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import nl.markmaaktmedia.keeper.scan.Classifier
@@ -26,13 +28,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val graph = app.graph
     private val snapshot = MutableStateFlow<Snapshot?>(null)
 
-    /** De keuzes van Mark liggen los van de scan: een veeg of een knop rekent alleen opnieuw, scant niet opnieuw. */
+    /**
+     * De keuzes van Mark liggen los van de scan: een veeg of een knop rekent alleen opnieuw, scant niet opnieuw. Dat rekenen gebeurt
+     * buiten de hoofdthread, zodat een tik niet wacht op het doorlopen van alle foto's.
+     */
     val state: StateFlow<UiState> = combine(snapshot, graph.prefs.skipped, graph.prefs.cameraVersion, graph.prefs.quality, graph.prefs.rejected) { snap, skipped, kept, quality, rejected ->
         if (snap == null) UiState() else {
             val photos = Classifier.classify(snap.items, snap.probes, skipped, kept, snap.doneNames, snap.lightroomFolder, rejected)
             UiState(false, photos, Classifier.summarize(photos, JpegQuality.bitsPerPixel(quality)), snap.sinceMs)
         }
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, UiState())
+    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, UiState())
 
     fun refresh() {
         viewModelScope.launch { snapshot.value = graph.scanner.scan() }
@@ -52,6 +57,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (targets.isEmpty()) return
         val (exclude, keep) = targets.partition { it.defaultsOn }
         viewModelScope.launch { graph.prefs.reject(keep.map { it.item.name }, exclude.map { it.item.name }) }
+    }
+
+    /** Het kruisje van "niet bewaren" weer weghalen. */
+    fun undoReject(photos: List<Photo>) {
+        val targets = photos.filter { it.selectable }
+        if (targets.isEmpty()) return
+        val (exclude, keep) = targets.partition { it.defaultsOn }
+        viewModelScope.launch { graph.prefs.undoReject(keep.map { it.item.name }, exclude.map { it.item.name }) }
     }
 
     fun toggle(photo: Photo) = select(listOf(photo), !photo.selected)

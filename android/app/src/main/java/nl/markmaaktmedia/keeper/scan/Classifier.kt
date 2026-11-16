@@ -34,7 +34,10 @@ object Classifier {
 
         return live.mapNotNull { item ->
             val hdr = probes[item.id]?.hasGainMap == true
-            val isOriginal = item.name.lowercase() !in done && !inLightroom(item) && !isGalleryEdit(item.name)
+            val lightroom = inLightroom(item)
+            val galleryCopy = isGalleryEdit(item.name)
+            val isDone = item.name.lowercase() in done
+            val isOriginal = !isDone && !lightroom && !galleryCopy
             // Is er van dit origineel een bewerking? Een Lightroom-export met dezelfde naam, of een Galerij-kopie met dezelfde opnametijd.
             val edit = when {
                 !isOriginal -> Edit.None
@@ -44,10 +47,10 @@ object Classifier {
                 else -> Edit.None
             }
             val status = when {
-                item.name.lowercase() in done -> Status.Done
-                item.name in skipped && (inLightroom(item) || isGalleryEdit(item.name)) -> Status.Skipped
-                inLightroom(item) -> Status.LightroomExport
-                isGalleryEdit(item.name) -> Status.GalleryEdit
+                isDone -> Status.Done
+                item.name in skipped && (lightroom || galleryCopy) -> Status.Skipped
+                lightroom -> Status.LightroomExport
+                galleryCopy -> Status.GalleryEdit
                 // Bewaren is een bewuste keuze en wint van "er bestaat een bewerking": dan gaat ook de camera-versie mee.
                 item.isDng -> when {
                     item.name in kept -> Status.CameraVersion

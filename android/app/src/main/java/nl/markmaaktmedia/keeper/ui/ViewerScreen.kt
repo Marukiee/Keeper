@@ -129,6 +129,8 @@ fun ViewerScreen(
     onReject: (Photo) -> Unit,
     onTrash: (Photo) -> Unit,
     onClose: () -> Unit,
+    /** Het kruisje weer weghalen: nog een keer op "niet bewaren" tikken. */
+    onUndoReject: (Photo) -> Unit = {},
     /** Waar elke tegel in de galerij staat; de foto vliegt bij het sluiten terug naar zijn eigen tegel. */
     bounds: TileBounds = TileBounds(),
     /** De foto die nu in beeld is, zodat de galerij zijn tegel leeg kan laten en er naartoe kan scrollen. */
@@ -175,11 +177,14 @@ fun ViewerScreen(
     // Tijdens het openen meldt het openen zelf de foto, op het moment dat de tegel leeg moet.
     LaunchedEffect(current.item.id) { if (!opening) onCurrent(current.item.id) }
     val scanner = context.graph.scanner
+    var askEdited by remember { mutableStateOf(false) }
+    // Bewaren en niet bewaren gaan door naar de volgende foto. De laatste blijft staan.
+    fun next() { if (pager.currentPage < list.lastIndex) scope.launch { pager.animateScrollToPage(pager.currentPage + 1) } }
     LaunchedEffect(Unit) {
         snapshotFlow { pagerRect }.first { it.width > 0f && it.height > 0f }
         val start = list[pager.currentPage.coerceIn(0, list.lastIndex)]
         val bitmap = scanner.cachedLarge(start.item, PREVIEW_EDGE) ?: scanner.cached(start.item, 360)
-        val tile = bounds.rects[start.item.id]
+        val tile = bounds.rect(start.item.id)
         if (bitmap != null && tile != null) {
             // De foto groeit vanuit zijn eigen tegel naar zijn plaats; de tegel blijft vanaf nu leeg.
             val fit = minOf(pagerRect.width / bitmap.width, pagerRect.height / bitmap.height)
@@ -206,7 +211,7 @@ fun ViewerScreen(
         if (closing || opening) return
         closing = true
         val bitmap = scanner.cachedLarge(current.item, PREVIEW_EDGE) ?: scanner.cached(current.item, 360)
-        val tile = bounds.rects[current.item.id]
+        val tile = bounds.rect(current.item.id)
         if (bitmap != null && tile != null && !zoomed && pagerRect.width > 0f && pagerRect.height > 0f) {
             // Zoals Immich: de foto vliegt vanaf waar hij nu is terug naar zijn eigen tegel, die tot nu toe leeg stond.
             val fit = minOf(pagerRect.width / bitmap.width, pagerRect.height / bitmap.height)
@@ -332,17 +337,17 @@ fun ViewerScreen(
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            // Bewaren en niet bewaren zetten de keuze en gaan door naar de volgende. De laatste foto blijft staan.
-            fun next() { if (pager.currentPage < list.lastIndex) scope.launch { pager.animateScrollToPage(pager.currentPage + 1) } }
+            // Bewaren en niet bewaren zetten de keuze en gaan door naar de volgende (de laatste foto blijft staan). Nog een keer op
+            // dezelfde knop tikken draait de keuze terug en blijft op deze foto.
             // IntrinsicSize.Min: de prullenbak is precies zo hoog als de pillen ernaast, ook bij een ander lettertype.
             Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (current.selectable) {
                     if (current.discarded) PrimaryPillButton(
-                        stringResource(R.string.viewer_discarded), { onReject(current); next() }, Modifier.weight(1f), icon = KeeperIcons.Close,
+                        stringResource(R.string.viewer_discarded), { onUndoReject(current) }, Modifier.weight(1f), icon = KeeperIcons.Close,
                         container = MaterialTheme.colorScheme.errorContainer, content = MaterialTheme.colorScheme.onErrorContainer,
                     ) else SecondaryPillButton(stringResource(R.string.viewer_discard), { onReject(current); next() }, Modifier.weight(1f), icon = KeeperIcons.Close)
-                    if (current.selected) PrimaryPillButton(stringResource(R.string.viewer_kept), { next() }, Modifier.weight(1f), icon = KeeperIcons.Check)
-                    else SecondaryPillButton(stringResource(R.string.viewer_keep), { onSelect(current, true); next() }, Modifier.weight(1f), icon = KeeperIcons.Check)
+                    if (current.selected) PrimaryPillButton(stringResource(R.string.viewer_kept), { onSelect(current, false) }, Modifier.weight(1f), icon = KeeperIcons.Check)
+                    else SecondaryPillButton(stringResource(R.string.viewer_keep), { if (current.askBeforeKeeping) askEdited = true else { onSelect(current, true); next() } }, Modifier.weight(1f), icon = KeeperIcons.Check)
                 } else Box(Modifier.weight(1f))
                 // Naar de prullenbak, na Android's eigen bevestiging; terug te zetten.
                 KeeperIconButton(
@@ -352,6 +357,16 @@ fun ViewerScreen(
                 )
             }
         }
+    }
+    if (askEdited) {
+        // De vraag hoort bij de foto waarop je drukte; blijf je niet op die foto, dan geldt hij nog steeds voor die ene.
+        val asked = current
+        EditedKeepDialog(
+            1,
+            onEditedOnly = { askEdited = false; onReject(asked); next() },
+            onExportToo = { askEdited = false; onSelect(asked, true); next() },
+            onDismiss = { askEdited = false },
+        )
     }
     hero?.let { h ->
         // De foto groeit of krimpt van zijn plek in de viewer naar het vierkantje van de tegel, en snijdt zich daarbij bij tot dat vierkant.

@@ -55,6 +55,9 @@ class ClassifierTest {
         // Bewaard: de camera-versie gaat mee, en de tegel blijft laten zien dat er een bewerking bestaat.
         assertEquals(Status.CameraVersion, p.status); assertEquals(Edit.Exported, p.edit)
         assertEquals(true, p.selectable)
+        // Al bewaard: geen vraag meer. En de export zelf is geen origineel met een bewerking.
+        assertEquals(false, p.askBeforeKeeping)
+        assertEquals(false, photos.first { it.item.id == export.id }.askBeforeKeeping)
         assertEquals(Edit.None, photos.first { it.item.id == export.id }.edit)
     }
 
@@ -65,6 +68,8 @@ class ClassifierTest {
         for (name in listOf(raw.name, original.name)) {
             val p = photos.first { it.item.name == name }
             assertEquals(true, p.selectable); assertEquals(false, p.goesAlong); assertEquals(false, p.cleanable)
+            // Bewaren zou hier een tweede versie naast de bewerkte geven: eerst vragen.
+            assertEquals(true, p.askBeforeKeeping)
         }
         assertEquals(Edit.Replaced, photos.first { it.item.id == original.id }.edit)
     }
