@@ -128,7 +128,7 @@ def process(name, path, outdir, font):
     with open(os.path.join(d, "metadata-diff.txt"), "w") as fh:
         fh.write("Alleen in origineel:\n" + "\n".join(sorted(a - b)) + "\n\nAlleen in resultaat:\n" + "\n".join(sorted(b - a)) + "\n")
     res["groottes"] = {"origineel": os.path.getsize(path), "basis_alleen": len(u.primary_bytes),
-                       "gainmap": os.path.getsize(path) - len(u.primary_bytes), "tonemap_q90": os.path.getsize(f3),
+                       "gainmap": u.gm_len, "trailer": u.trailer_len, "tonemap_q90": os.path.getsize(f3),
                        "apple": os.path.getsize(f4), "apple_piek": os.path.getsize(f5)}
 
     # Vergelijkingsbeelden (Display P3-profiel mee, zodat kleuren op het Mac-scherm kloppen)

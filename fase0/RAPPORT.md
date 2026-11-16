@@ -2,6 +2,7 @@
 
 Open `fase0/resultaten/vergelijking.html` in Chrome of Safari op je MacBook (XDR-scherm, helderheid op maximum).
 Per foto staan daar vier versies naast elkaar. Paneel 1 is het echte Ultra HDR-bestand, dus alleen daar zie je ProXDR.
+Ik heb de pagina zelf niet in een browser kunnen testen. Toont paneel 1 geen HDR, open dan `1-origineel-proxdr.jpg` in Preview.
 
 ## Wat ik gemeten heb
 
@@ -29,7 +30,9 @@ pixel, dus het gaat gewoon in tegels, en de gain map wordt per rijstrook bilinea
 eerste pass op elke vierde pixel.
 
 Mijn eerste versie (knie 0,70) brandde de lucht uit: 4,2% van de pixels op wit, tegen 0,1% in de basis, en de wolken
-verloren hun tekening. Ik heb de knie verlaagd. Drie sterktes staan als `varianten.png` per foto:
+verloren hun tekening. Ik heb de knie verlaagd. Dat helpt maar deels: op 100% houden de wolken bovenin wat tekening, maar de
+lucht rond de horizon is nog vrijwel egaal wit, helderder dan in de basis. Dat is de prijs van de opheldering; lichten-behouden
+doet het beter. Drie sterktes staan als `varianten.png` per foto:
 
 | naam | belichting | knie | tuinfoto: pixels op wit |
 |---|---|---|---|
@@ -51,7 +54,7 @@ onderscheiden, 85 is hoog):
 
 | versie | MB | bits/pixel | score |
 |---|---|---|---|
-| origineel (basis 13,66 + gain map 4,80) | 18,46 | | |
+| origineel (basis 13,66 + gain map 4,80, geen trailer) | 18,46 | | |
 | jpegli q85 | 3,58 | 0,57 | 81,9 |
 | **jpegli q90** | **4,53** | 0,72 | 85,2 |
 | jpegli q93 | 5,79 | 0,92 | 87,7 |
@@ -67,15 +70,17 @@ onderscheiden, 85 is hoog):
 - "Visueel verliesvrij" in de zin van score 90 vraagt jpegli q95 (7,3 MB). Q90 tot q93 is voor een gewone foto
   nauwelijks van het origineel te onderscheiden. Jouw keuze.
 - De 12,5 MP-foto's komen op 0,3 MB door hun gladde inhoud. Dat zegt niets over echte foto's.
-- Bij de 12,5 MP-JPG's van de telefoon zit 1,2 MB van de 3,6 MB in een OnePlus-trailer (`src.image` en `filter.info`),
-  die niet meegaat. Dat is een extra besparing, maar de naam van het filter (bijvoorbeeld Warm Flash) gaat dan verloren.
+- Een 12,5 MP-JPG van de telefoon is 3,6 MB: basis 2,11, gain map 0,23 en daarna een OnePlus-trailer van 1,26 MB
+  (`src.image`, `filter.info`, `hdr.transform.data`), die niet meegaat. De DNG-previews hebben die trailer niet. Dat is een extra besparing, maar de naam van het filter (bijvoorbeeld Warm Flash) gaat dan verloren.
   Voor de latere presets kan de app de filternaam apart bewaren.
 
 ## Metadata (eerste controle, de volledige exiftool-diff is fase 2)
 
 Behouden en gecontroleerd op alle vijf: GPS, DateTimeOriginal, SubSecTimeOriginal, OffsetTimeOriginal, orientation,
 make, model, lens, ICC (Display P3). Weg: hdrgm-XMP, GContainer, MPF en gain map (de uitvoer bevat geen tweede beeld),
-de oude Exif-thumbnail, de OnePlus-trailer. De DNG-preview heeft orientation 6; die blijft staan, we draaien geen pixels.
+het APP2-segment ISO 21496-1 (`urn:iso:std:iso:ts:21496:-1`), de oude Exif-thumbnail, de OnePlus-trailer. Het prototype maakt een
+nieuw bestand en neemt alleen gekozen tags over, dus die segmenten ontbreken vanzelf. De app in fase 2 moet ze expliciet
+weglaten als hij APP-segmenten uit de bron kopieert, anders ziet een viewer de foto nog als HDR. De DNG-preview heeft orientation 6; die blijft staan, we draaien geen pixels.
 
 ## Voor de app (fase 2)
 

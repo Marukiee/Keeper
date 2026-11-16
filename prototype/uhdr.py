@@ -98,6 +98,9 @@ class UltraHdr:
                 self.meta = meta
                 self.gm = Image.open(io.BytesIO(extra))
                 break
+        # Grootte van het gain-map-beeld en van wat erna komt (bij Oppo de OnePlus-trailer met src.image)
+        self.gm_len = len(parts[1]) if len(parts) > 1 else 0
+        self.trailer_len = len(data) - sum(len(p) for p in parts)
         self.width, self.height = self.base.size
         self._base_arr = None
         self._gm_arr = None

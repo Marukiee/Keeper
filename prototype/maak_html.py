@@ -32,7 +32,8 @@ for f in fotos:
     r = json.load(open(os.path.join(out, f, "resultaat.json")))
     g = r["groottes"]
     h.append(f'<h2>{html.escape(f)} <small style="color:#888;font-size:14px">{r["afmeting"]}, {r["mp"]} MP, piek van de inhoud {r["piek"]}x</small></h2>')
-    h.append(f'<p class="n">Origineel {g["origineel"]/1e6:.2f} MB (basis {g["basis_alleen"]/1e6:.2f} + gain map {g["gainmap"]/1e6:.2f}). '
+    trailer = f' + OnePlus-trailer {g["trailer"]/1e6:.2f}' if g.get("trailer", 0) > 1000 else ""
+    h.append(f'<p class="n">Origineel {g["origineel"]/1e6:.2f} MB (basis {g["basis_alleen"]/1e6:.2f} + gain map {g["gainmap"]/1e6:.2f}{trailer}). '
              f'Mijn tone map als jpegli q90: {g["tonemap_q90"]/1e6:.2f} MB.</p><div class="g">')
     for fn, titel, uitleg in PANELEN:
         h.append(f'<figure><a href="{f}/{fn}" target="_blank"><img loading="lazy" decoding="async" src="{f}/{fn}"></a>'

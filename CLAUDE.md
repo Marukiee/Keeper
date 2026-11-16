@@ -33,7 +33,8 @@ Zie `fase0/RAPPORT.md`.
 - 50 MP en 200 MP in tegels verwerken; nooit een volledige float-buffer.
 - Overslaan: `.trashed-*` en `DCIM/Immich`. Galerij-bewerkingen herkennen aan `IMG_YYYYMMDD_HHMMSS.jpg`.
 - Metadata: behouden GPS, DateTimeOriginal, SubSecTimeOriginal, OffsetTimeOriginal, orientation, make, model,
-  lens en het ICC-profiel (Display P3). Weg: hdrgm-XMP, MPF/gain map, GContainer, oude thumbnail, OnePlus-trailer.
+  lens en het ICC-profiel (Display P3). Weg: hdrgm-XMP, MPF/gain map, GContainer, het APP2-segment ISO 21496-1 (`urn:iso:std:iso:ts:21496:-1`, anders
+  zien viewers de foto nog als HDR), oude thumbnail, OnePlus-trailer. Neem APP-segmenten nooit blind over uit de bron.
   Verplichte test: exiftool-diff op de Mac, origineel tegen resultaat.
 
 ## Prototype (`prototype/`)
