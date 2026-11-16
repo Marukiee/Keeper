@@ -1,0 +1,110 @@
+package nl.markmaaktmedia.keeper.convert
+
+import kotlin.math.exp
+import kotlin.math.ln
+import kotlin.math.max
+import kotlin.math.min
+
+/**
+ * Globale tone map van lineaire HDR naar SDR, per pixel (dus geschikt voor rijstroken). Een port van `prototype/tonemap.py`;
+ * de paritytest vergelijkt de uitkomst met dat prototype.
+ *
+ * Luminantie krijgt een curve met een zachte schouder boven de knie, de kleurverhouding blijft, wat daarna nog boven 1,0
+ * uitkomt wordt naar grijs gedesatureerd. Een halve luminantiecurve en een halve per-kanaalcurve (mix 0,5) houdt blauwe lucht blauw.
+ */
+class ToneMapper(
+    peak: Float,
+    private val exposure: Float,
+    private val knee: Float,
+    private val mix: Float = 0.5f,
+    private val luma: FloatArray = LUMA_P3,
+) {
+    private val invKnee = 1f / (1f - knee)
+    private val w2: Float = max((peak * exposure - knee) * invKnee, 1e-3f).let { it * it }
+
+    /** Lineair tot de knie, daarboven een zachte rolloff die de piek precies op wit brengt. */
+    fun curve(v: Float): Float {
+        val vs = v * exposure
+        if (vs <= knee) return min(vs, 1f)
+        val x = (vs - knee) * invKnee
+        val g = x * (1f + x / w2) / (1f + x)
+        return min(knee + (1f - knee) * g, 1f)
+    }
+
+    /** Schrijft lineaire SDR in [0,1] naar `out[o..o+2]`, zelfde gamut als de invoer. */
+    fun map(r: Float, g: Float, b: Float, out: FloatArray, o: Int) {
+        val y = luma[0] * r + luma[1] * g + luma[2] * b
+        val yo = curve(y)
+        val scale = if (y > 1e-6f) yo / y else exposure
+        var or = r * scale
+        var og = g * scale
+        var ob = b * scale
+        val m = max(or, max(og, ob))
+        if (m > 1f) {
+            val t = (1f - yo) / max(m - yo, 1e-6f)
+            or = yo + (or - yo) * t
+            og = yo + (og - yo) * t
+            ob = yo + (ob - yo) * t
+        }
+        if (mix < 1f) {
+            or = mix * or + (1f - mix) * curve(r)
+            og = mix * og + (1f - mix) * curve(g)
+            ob = mix * ob + (1f - mix) * curve(b)
+        }
+        out[o] = or.coerceIn(0f, 1f)
+        out[o + 1] = og.coerceIn(0f, 1f)
+        out[o + 2] = ob.coerceIn(0f, 1f)
+    }
+
+    companion object {
+        /** Luminantiecoefficienten voor lineair Display P3 en voor sRGB (Rec. 709). */
+        val LUMA_P3 = floatArrayOf(0.2289746f, 0.6917385f, 0.0792869f)
+        val LUMA_SRGB = floatArrayOf(0.2126f, 0.7152f, 0.0722f)
+
+        /** Mix is overal 0,5; belichting en knie per sterkte staan in [nl.markmaaktmedia.keeper.scan.ToneMap]. */
+        fun of(t: nl.markmaaktmedia.keeper.scan.ToneMap, peak: Float, luma: FloatArray) =
+            ToneMapper(peak, t.exposure.toFloat(), t.knee.toFloat(), 0.5f, luma)
+    }
+}
+
+/**
+ * Luminantiehistogram van de eerste pass: de piek van de inhoud is het 99,95e percentiel, tussen 1,0 en 4,93.
+ * Dezelfde bakken als `peak_from_hist` in het prototype: [0, 1e-4) en daarna 2000 logaritmische bakken tot 8.
+ */
+class LuminanceHistogram {
+    private val edges = DoubleArray(BINS + 1).also {
+        it[0] = 0.0
+        val lo = ln(1e-4)
+        val hi = ln(8.0)
+        for (i in 0 until BINS) it[i + 1] = exp(lo + (hi - lo) * i / (BINS - 1))
+        it[1] = 1e-4
+        it[BINS] = 8.0
+    }
+    private val counts = LongArray(BINS)
+
+    fun add(y: Float) {
+        val v = y.toDouble()
+        if (v < 0.0 || v > 8.0) return
+        // Rechtse bovengrens, zoals np.histogram: de laatste bak sluit de bovenrand in.
+        var lo = 0
+        var hi = BINS
+        while (lo < hi) {
+            val mid = (lo + hi) ushr 1
+            if (edges[mid + 1] <= v) lo = mid + 1 else hi = mid
+        }
+        counts[min(lo, BINS - 1)]++
+    }
+
+    fun peak(percent: Double = 99.95, lo: Float = 1.0f, hi: Float = 4.93f): Float {
+        val total = max(counts.sum(), 1L).toDouble()
+        var run = 0L
+        var idx = BINS
+        for (i in 0 until BINS) {
+            run += counts[i]
+            if (run / total >= percent / 100.0) { idx = i; break }
+        }
+        return edges[min(idx, BINS - 1) + 1].toFloat().coerceIn(lo, hi)
+    }
+
+    private companion object { const val BINS = 2000 }
+}
