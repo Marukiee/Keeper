@@ -8,7 +8,19 @@ import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.lerp
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.unit.Constraints
+import kotlin.math.roundToInt
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.animate
@@ -95,6 +107,9 @@ private const val BARS_FADE = 5f
 private const val BACKDROP_FADE = 1.8f
 /** Zo klein is de foto als hij helemaal is weggesleept. */
 private const val MIN_DRAG_SCALE = 0.6f
+/** Hoe lang de foto over naar zijn tegel doet (ms), en hoe rond de hoeken van de tegel zijn (zoals in de galerij). */
+private const val HERO_MS = 300
+private val TILE_CORNER = 8.dp
 
 /**
  * Eén foto groot, met de acties erbij: bewaren of niet bewaren (allebei gaan vanzelf door naar de volgende, om snel door een
@@ -110,6 +125,10 @@ fun ViewerScreen(
     onReject: (Photo) -> Unit,
     onTrash: (Photo) -> Unit,
     onClose: () -> Unit,
+    /** Waar elke tegel in de galerij staat; de foto vliegt bij het sluiten terug naar zijn eigen tegel. */
+    bounds: TileBounds = TileBounds(),
+    /** De foto die nu in beeld is, zodat de galerij zijn tegel leeg kan laten en er naartoe kan scrollen. */
+    onCurrent: (Long) -> Unit = {},
 ) {
     val byId = remember(photos) { photos.associateBy { it.item.id } }
     val list = ids.mapNotNull { byId[it] }
@@ -138,30 +157,61 @@ fun ViewerScreen(
             animate(Offset.VectorConverter, drag, Offset.Zero, Offset(velocity.x, velocity.y), spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessMediumLow)) { value, _ -> drag = value }
         }
     }
-    fun closeNow(velocity: Velocity) {
-        closing = true
-        onClose()
-        // Het scherm wisselt al; de foto zakt nog even door terwijl hij met het scherm wegvervaagt.
-        settleJob[0] = scope.launch {
-            launch { animate(closeFade, 1f, animationSpec = tween(240)) { value, _ -> closeFade = value } }
-            animate(Offset.VectorConverter, drag, drag + Offset(0f, areaHeight * 0.2f), Offset(velocity.x, velocity.y), tween(240, easing = LinearOutSlowInEasing)) { value, _ -> drag = value }
-        }
-    }
+    // Het kader waarin de pager staat en het begin van dit scherm, beide in schermcoördinaten, om de foto naar zijn tegel te laten vliegen.
+    var pagerRect by remember { mutableStateOf(Rect.Zero) }
+    var origin by remember { mutableStateOf(Offset.Zero) }
+    var hero by remember { mutableStateOf<Hero?>(null) }
+    var heroT by remember { mutableFloatStateOf(0f) }
     LaunchedEffect(pager.currentPage) { zoomed = false }
     val current = list[pager.currentPage.coerceIn(0, list.lastIndex)]
+    LaunchedEffect(current.item.id) { onCurrent(current.item.id) }
+    val scanner = context.graph.scanner
+    fun closeNow(velocity: Velocity) {
+        if (closing) return
+        closing = true
+        val bitmap = scanner.cachedLarge(current.item, PREVIEW_EDGE) ?: scanner.cached(current.item, 360)
+        val tile = bounds.rects[current.item.id]
+        if (bitmap != null && tile != null && !zoomed && pagerRect.width > 0f && pagerRect.height > 0f) {
+            // Zoals Immich: de foto vliegt vanaf waar hij nu is terug naar zijn eigen tegel, die tot nu toe leeg stond.
+            val fit = minOf(pagerRect.width / bitmap.width, pagerRect.height / bitmap.height)
+            val scale = 1f - (1f - MIN_DRAG_SCALE) * progress()
+            val centre = pagerRect.center + drag
+            val w = bitmap.width * fit * scale
+            val h = bitmap.height * fit * scale
+            hero = Hero(bitmap, Rect(centre.x - w / 2f, centre.y - h / 2f, centre.x + w / 2f, centre.y + h / 2f), tile)
+            settleJob[0] = scope.launch {
+                launch { animate(closeFade, 1f, animationSpec = tween(HERO_MS)) { value, _ -> closeFade = value } }
+                animate(0f, 1f, animationSpec = tween(HERO_MS, easing = FastOutSlowInEasing)) { value, _ -> heroT = value }
+                // De tegel verschijnt nu onder de foto, die daarna wegvervaagt: geen sprong.
+                onClose()
+            }
+        } else {
+            onClose()
+            // Geen tegel in beeld: het scherm wisselt al, de foto zakt nog even door terwijl hij met het scherm wegvervaagt.
+            settleJob[0] = scope.launch {
+                launch { animate(closeFade, 1f, animationSpec = tween(240)) { value, _ -> closeFade = value } }
+                animate(Offset.VectorConverter, drag, drag + Offset(0f, areaHeight * 0.2f), Offset(velocity.x, velocity.y), tween(240, easing = LinearOutSlowInEasing)) { value, _ -> drag = value }
+            }
+        }
+    }
+    // Het gebaar hieronder leeft langer dan één samenstelling; het moet de huidige foto en grenzen zien, niet die van het begin.
+    val closeLatest by rememberUpdatedState<(Velocity) -> Unit> { closeNow(it) }
+    // Terug (knop of gebaar) sluit op dezelfde manier. Altijd actief, zodat het scherm niet midden in de vlucht wegvalt.
+    BackHandler { closeLatest(Velocity.Zero) }
     // Knoppen en kop zijn al weg na een vijfde van het sleepbereik, zodat ze niet over de galerij eronder hangen.
     val barsFade: androidx.compose.ui.graphics.GraphicsLayerScope.() -> Unit = { alpha = 1f - (progress() * BARS_FADE).coerceAtMost(1f) }
 
-    Column(
+    Box(
         Modifier.fillMaxSize()
+            .onGloballyPositioned { origin = it.positionInRoot() }
             // De achtergrond wordt doorzichtig naarmate je de foto wegsleept: de galerij eronder komt langzaam terug.
             .drawBehind { drawRect(backdrop, alpha = 1f - (progress() * BACKDROP_FADE).coerceAtMost(1f)) }
             // De viewer ligt over de galerij: aanrakingen mogen er niet doorheen vallen.
-            .pointerInput(Unit) {}
-            .navigationBarsPadding(),
+            .pointerInput(Unit) {},
     ) {
+    Column(Modifier.fillMaxSize().navigationBarsPadding()) {
         Row(Modifier.fillMaxWidth().graphicsLayer(block = barsFade).padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            KeeperIconButton(KeeperIcons.Back, stringResource(R.string.settings_back), onClose)
+            KeeperIconButton(KeeperIcons.Back, stringResource(R.string.settings_back), { closeLatest(Velocity.Zero) })
             Column(Modifier.weight(1f).padding(start = 4.dp)) {
                 Text(current.item.name, style = MaterialTheme.typography.titleMedium, maxLines = 1)
                 Text(
@@ -175,7 +225,7 @@ fun ViewerScreen(
         // Zo staan de aanraakcoördinaten niet mee te schuiven met de foto.
         Box(
             Modifier.weight(1f).fillMaxWidth()
-                .onSizeChanged { areaHeight = it.height.toFloat().coerceAtLeast(1f) }
+                .onGloballyPositioned { areaHeight = it.size.height.toFloat().coerceAtLeast(1f); pagerRect = it.boundsInRoot() }
                 .pointerInput(Unit) {
                     val slop = viewConfiguration.touchSlop
                     awaitEachGesture {
@@ -208,7 +258,7 @@ fun ViewerScreen(
                         if (!dragging) return@awaitEachGesture
                         val velocity = tracker.calculateVelocity()
                         // Ver genoeg gesleept, of snel naar beneden gegooid, sluit. Terug omhoog en loslaten laat hem staan.
-                        if (drag.y > areaHeight * CLOSE_AT || (velocity.y > CLOSE_VELOCITY && drag.y > slop * 2)) closeNow(velocity) else springBack(velocity)
+                        if (drag.y > areaHeight * CLOSE_AT || (velocity.y > CLOSE_VELOCITY && drag.y > slop * 2)) closeLatest(velocity) else springBack(velocity)
                     }
                 },
         ) {
@@ -217,6 +267,8 @@ fun ViewerScreen(
                 modifier = Modifier.fillMaxSize().graphicsLayer {
                     val scale = 1f - (1f - MIN_DRAG_SCALE) * progress()
                     translationX = drag.x; translationY = drag.y; scaleX = scale; scaleY = scale
+                    // Tijdens de vlucht naar de tegel tekent de laag hieronder de foto; deze staat dan even uit.
+                    alpha = if (hero != null) 0f else 1f
                 },
                 userScrollEnabled = !zoomed,
                 key = { list.getOrNull(it)?.item?.id ?: it },
@@ -255,7 +307,28 @@ fun ViewerScreen(
             if (current.item.isDng) SecondaryPillButton(stringResource(R.string.review_lightroom), { openInLightroom(scope, context, current, photos, defaultLook) }, Modifier.fillMaxWidth(), icon = KeeperIcons.OpenInNew)
         }
     }
+    hero?.let { h ->
+        // De foto groeit of krimpt van zijn plek in de viewer naar het vierkantje van de tegel, en snijdt zich daarbij bij tot dat vierkant.
+        val bitmap = remember(h) { h.bitmap.asImageBitmap() }
+        Image(
+            bitmap, null, contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .fillMaxSize()
+                .layout { measurable, constraints ->
+                    val rect = lerp(h.from, h.to, heroT)
+                    val placeable = measurable.measure(Constraints.fixed(rect.width.roundToInt().coerceAtLeast(1), rect.height.roundToInt().coerceAtLeast(1)))
+                    layout(constraints.maxWidth, constraints.maxHeight) {
+                        placeable.place((rect.left - origin.x).roundToInt(), (rect.top - origin.y).roundToInt())
+                    }
+                }
+                .graphicsLayer { shape = RoundedCornerShape(TILE_CORNER.toPx() * heroT); clip = true },
+        )
+    }
+    }
 }
+
+/** Vanaf waar de foto naar zijn tegel vliegt, en waarnaartoe; beide in schermcoördinaten. */
+private class Hero(val bitmap: android.graphics.Bitmap, val from: Rect, val to: Rect)
 
 /**
  * Een foto die je kunt inzoomen. Eerst staat er een snel voorbeeld; zodra je inzoomt komt er een scherper beeld

@@ -64,6 +64,9 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
     var filter by rememberSaveable { mutableIntStateOf(0) }
     var sub by remember { mutableStateOf(Sub.None) }
     var viewer by remember { mutableStateOf<ViewerRequest?>(null) }
+    // De foto die de viewer nu toont, en waar de tegels staan: voor de vlucht van de foto terug naar zijn tegel.
+    var viewerCurrent by remember { mutableStateOf<Long?>(null) }
+    val tileBounds = remember { TileBounds() }
     var permitted by remember { mutableStateOf(granted(context)) }
     val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { permitted = it }
 
@@ -114,9 +117,12 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
                         state, GalleryFilter.entries[filter], { filter = it.ordinal }, permitted, { ask.launch(Manifest.permission.READ_MEDIA_IMAGES) },
                         { photos -> vm.select(photos, true) },
                         { photos -> vm.reject(photos) },
-                        { photo, shown -> viewer = ViewerRequest(shown.map { it.item.id }, photo.item.id); sub = Sub.Viewer },
+                        { photo, shown -> viewer = ViewerRequest(shown.map { it.item.id }, photo.item.id); viewerCurrent = photo.item.id; sub = Sub.Viewer },
                         { sub = Sub.Overview },
                         trash,
+                        bounds = tileBounds,
+                        // Zolang de viewer open staat blijft de tegel van de getoonde foto leeg.
+                        hiddenId = if (sub == Sub.Viewer) viewerCurrent else null,
                     )
                     1 -> EditScreen(state.photos, { photo, use -> vm.useCameraVersion(photo, use) }, { photo -> trash(listOf(photo)) }, padding)
                     else -> SettingsScreen({ sub = Sub.Updates }, padding)
@@ -137,7 +143,11 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
             exit = fadeOut(tween(220)),
         ) {
             viewer?.let { request ->
-                ViewerScreen(request.ids, request.startId, state.photos, { photo, on -> vm.select(listOf(photo), on) }, { photo -> vm.reject(listOf(photo)) }, { photo -> trash(listOf(photo)) }, { sub = Sub.None })
+                ViewerScreen(
+                    request.ids, request.startId, state.photos,
+                    { photo, on -> vm.select(listOf(photo), on) }, { photo -> vm.reject(listOf(photo)) }, { photo -> trash(listOf(photo)) }, { sub = Sub.None },
+                    bounds = tileBounds, onCurrent = { viewerCurrent = it },
+                )
             }
         }
     }

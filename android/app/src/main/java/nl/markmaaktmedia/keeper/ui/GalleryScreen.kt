@@ -36,6 +36,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.delay
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -132,6 +136,10 @@ fun GalleryScreen(
     onOpen: (Photo, List<Photo>) -> Unit,
     onOverview: () -> Unit,
     onTrashMany: (List<Photo>) -> Unit,
+    /** De tegels melden hier waar ze staan, voor de vlucht van de foto terug naar zijn tegel. */
+    bounds: TileBounds = TileBounds(),
+    /** De foto die nu groot open staat: zijn tegel blijft leeg (het gat waar hij naartoe terugvliegt) en de lijst scrolt ernaartoe. */
+    hiddenId: Long? = null,
 ) {
     // Opruimen: welke dag en welke foto's van die dag. Pas na een bevestiging gaat er iets naar de prullenbak.
     var cleanup by remember { mutableStateOf<Pair<String, List<Photo>>?>(null) }
@@ -208,6 +216,8 @@ fun GalleryScreen(
                     onPick = ::pick,
                     onSelectionEnd = { if (picked.isEmpty()) selecting = false },
                     onOpen = onOpen,
+                    bounds = bounds,
+                    hiddenId = hiddenId,
                 ) { label, photos -> cleanup = label to photos }
             }
             if (hasPermission && state.photos.isNotEmpty()) {
@@ -273,9 +283,25 @@ private fun PhotoGrid(
     onPick: (List<Photo>, Boolean) -> Unit,
     onSelectionEnd: () -> Unit,
     onOpen: (Photo, List<Photo>) -> Unit,
+    bounds: TileBounds,
+    hiddenId: Long?,
     onCleanup: (String, List<Photo>) -> Unit,
 ) {
     val gridState = rememberLazyGridState()
+    // Veegt Mark in de viewer naar een foto die in de galerij niet in beeld is, dan scrolt de lijst mee (zoals in Immich),
+    // zodat er bij het sluiten een tegel is om naartoe te vliegen. Onder de balk onderaan telt als niet in beeld.
+    LaunchedEffect(hiddenId) {
+        val id = hiddenId ?: return@LaunchedEffect
+        val index = entries.indexOfFirst { it is Entry.Cell && it.photo.item.id == id }
+        if (index < 0) return@LaunchedEffect
+        val info = gridState.layoutInfo
+        val limit = info.viewportSize.height - info.afterContentPadding
+        val visible = info.visibleItemsInfo.firstOrNull { it.key == id }
+        if (visible == null || visible.offset.y < 0 || visible.offset.y + visible.size.height > limit) {
+            val height = visible?.size?.height ?: info.visibleItemsInfo.firstOrNull { it.key is Long }?.size?.height ?: 0
+            gridState.animateScrollToItem(index, scrollOffset = -((limit - height) / 2).coerceAtLeast(0))
+        }
+    }
     val scope = rememberCoroutineScope()
     val haptics = LocalHapticFeedback.current
     val byId by rememberUpdatedState(remember(shown) { shown.associateBy { it.item.id } })
@@ -395,7 +421,7 @@ private fun PhotoGrid(
                 is Entry.Cell -> {
                     val photo = entry.photo
                     val isOn = photo.item.id in picked
-                    Tile(photo, selecting, isOn, { onPick(listOf(photo), !isOn) }, {
+                    Tile(photo, selecting, isOn, hiddenId == photo.item.id, bounds, { onPick(listOf(photo), !isOn) }, {
                         // Een tik na een lange druk telt niet. In selectiemodus zet een tik de foto aan of uit, anders opent hij groot.
                         if (SystemClock.uptimeMillis() - lastLongPress[0] > 500L) {
                             if (selecting) { if (photo.selectable) onPick(listOf(photo), !isOn) } else onOpen(photo, shown)
@@ -463,7 +489,9 @@ private fun DecisionBadge(kept: Boolean, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun Tile(photo: Photo, selecting: Boolean, picked: Boolean, onToggle: () -> Unit, onOpen: () -> Unit) {
+private fun Tile(photo: Photo, selecting: Boolean, picked: Boolean, hidden: Boolean, bounds: TileBounds, onToggle: () -> Unit, onOpen: () -> Unit) {
+    // Voor de vlucht van de foto terug naar deze tegel (schermcoördinaten). Een tegel die uit beeld raakt, meldt zich af.
+    DisposableEffect(photo.item.id) { onDispose { bounds.rects.remove(photo.item.id) } }
     // Alleen een gekozen foto (selectie) wordt kleiner met ronde hoeken. Bewaard of niet bewaard verandert de tegel zelf niet.
     val scale by animateFloatAsState(if (picked) 0.88f else 1f, KeeperMotion.bouncy(), label = "tileScale")
     val corner by animateDpAsState(if (picked) 18.dp else 8.dp, KeeperMotion.bouncy(), label = "tileCorner")
@@ -476,9 +504,10 @@ private fun Tile(photo: Photo, selecting: Boolean, picked: Boolean, onToggle: ()
         photo.item.isDng -> R.string.tile_raw
         else -> null
     }
-    Box(Modifier.aspectRatio(1f).bouncyClickable(role = Role.Image, onClick = onOpen)) {
+    Box(Modifier.aspectRatio(1f).onGloballyPositioned { bounds.rects[photo.item.id] = it.boundsInRoot() }.bouncyClickable(role = Role.Image, onClick = onOpen)) {
         // Foto, vinkje, hartje en labels staan in één laag die samen kleiner wordt, zodat ze op dezelfde plek op de foto blijven.
-        Box(Modifier.fillMaxSize().graphicsLayer { scaleX = scale; scaleY = scale }) {
+        // Staat de foto groot open, dan is de tegel leeg: hij vliegt er bij het sluiten naar terug.
+        Box(Modifier.fillMaxSize().graphicsLayer { scaleX = scale; scaleY = scale; alpha = if (hidden) 0f else 1f }) {
             PhotoThumb(photo.item, 360, Modifier.fillMaxSize().graphicsLayer { alpha = dim }.clip(RoundedCornerShape(corner)))
             if (selecting && photo.selectable) SelectCircle(picked, onToggle, Modifier.align(Alignment.TopStart))
             if (photo.item.isFavorite) {
