@@ -34,10 +34,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import kotlinx.coroutines.delay
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
@@ -121,12 +118,11 @@ fun GalleryScreen(
 ) {
     // Opruimen: welke dag en welke foto's van die dag. Pas na een bevestiging gaat er iets naar de prullenbak.
     var cleanup by remember { mutableStateOf<Pair<String, List<Photo>>?>(null) }
-    // Alles uitzetten kan per ongeluk; een paar seconden lang kun je het ongedaan maken.
-    var cleared by remember { mutableStateOf<List<Photo>>(emptyList()) }
-    // Selectiemodus: begint met een lange druk, eindigt met het kruisje of de terugknop.
-    var selecting by rememberSaveable { mutableStateOf(false) }
+    // Selectiemodus: begint met een lange druk. Terug sluit hem en houdt wat je veranderd hebt; het kruisje zet alles terug
+    // zoals het was toen de modus begon. Alleen de wijzigingen uit deze modus, dus Lightroom-exports blijven aan staan.
+    var selecting by remember { mutableStateOf(false) }
+    var atEntry by remember { mutableStateOf<Set<Long>>(emptySet()) }
     BackHandler(enabled = selecting) { selecting = false }
-    LaunchedEffect(cleared) { if (cleared.isNotEmpty()) { delay(6000); cleared = emptyList() } }
     val shown = remember(state.photos, filter) { state.photos.filter(filter::matches) }
     val today = remember { LocalDate.now(zone) }
     val todayLabel = stringResource(R.string.day_today)
@@ -174,13 +170,19 @@ fun GalleryScreen(
                         icon = if (favorites) KeeperIcons.Favorite else KeeperIcons.Image,
                     )
                 }
-                else -> PhotoGrid(entries, shown, todayLabel, yesterdayLabel, today, selecting, { selecting = true }, onSelect, onOpen) { label, photos -> cleanup = label to photos }
+                else -> PhotoGrid(entries, shown, todayLabel, yesterdayLabel, today, selecting, {
+        if (!selecting) { atEntry = state.photos.filter { it.selectable && it.selected }.map { it.item.id }.toSet(); selecting = true }
+    }, onSelect, onOpen) { label, photos -> cleanup = label to photos }
             }
             if (hasPermission && state.photos.isNotEmpty()) {
                 SelectionBar(
-                    state, selecting, onOverview, cleared.isNotEmpty(),
-                    onClear = { val on = state.photos.filter { it.selectable && it.selected }; cleared = on; onSelect(on, false); selecting = false },
-                    onUndo = { onSelect(cleared, true); cleared = emptyList() },
+                    state, selecting, onOverview,
+                    onCancel = {
+                        val all = state.photos.filter { it.selectable }
+                        onSelect(all.filter { it.selected && it.item.id !in atEntry }, false)
+                        onSelect(all.filter { !it.selected && it.item.id in atEntry }, true)
+                        selecting = false
+                    },
                     modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(start = 20.dp, end = 20.dp, bottom = 90.dp),
                 )
             }
@@ -377,26 +379,21 @@ private fun Tile(photo: Photo, selecting: Boolean, onToggle: () -> Unit, onOpen:
 
 /**
  * Onderaan: hoeveel er bewaard is en wat dat scheelt, tik op de tekst voor het overzicht. Naast de hoofdknop staat in
- * selectiemodus het kruisje: dat annuleert de selectie (alles uit, zes seconden ongedaan te maken) en sluit de modus.
+ * selectiemodus het kruisje: dat zet de selectie terug zoals ze was bij het begin van de modus en sluit hem.
  */
 @Composable
 private fun SelectionBar(
     state: UiState,
     selecting: Boolean,
     onOverview: () -> Unit,
-    justCleared: Boolean,
-    onClear: () -> Unit,
-    onUndo: () -> Unit,
+    onCancel: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val s = state.summary
     Surface(modifier.fillMaxWidth(), shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh, tonalElevation = 3.dp) {
         Row(Modifier.padding(start = 20.dp, end = 8.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            if (justCleared) {
-                Text(stringResource(R.string.gallery_cleared), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                PrimaryPillButton(stringResource(R.string.gallery_undo), onUndo)
-            } else {
+            run {
                 Column(Modifier.weight(1f)) {
                     Text(
                         if (s.goingCount == 0) stringResource(R.string.gallery_none) else stringResource(R.string.gallery_selected, s.goingCount),
@@ -409,7 +406,7 @@ private fun SelectionBar(
                         modifier = Modifier.bouncyClickable(onClick = onOverview),
                     )
                 }
-                if (selecting) KeeperIconButton(KeeperIcons.Close, stringResource(R.string.gallery_deselect_all), onClear, size = 44, iconSize = 20, background = MaterialTheme.colorScheme.surfaceContainerHighest)
+                if (selecting) KeeperIconButton(KeeperIcons.Close, stringResource(R.string.gallery_deselect_all), onCancel, size = 44, iconSize = 20, background = MaterialTheme.colorScheme.surfaceContainerHighest)
                 PrimaryPillButton(stringResource(R.string.gallery_prepare), {
                     // Fase 1 leest alleen; het omzetten volgt na Mark's OK voor fase 2.
                     Toast.makeText(context, R.string.gallery_prepare_soon, Toast.LENGTH_SHORT).show()
