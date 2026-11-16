@@ -92,12 +92,15 @@ import nl.markmaaktmedia.keeper.ui.components.KeeperIconButton
 import nl.markmaaktmedia.keeper.ui.components.PrimaryPillButton
 import nl.markmaaktmedia.keeper.ui.components.SecondaryPillButton
 import nl.markmaaktmedia.keeper.ui.theme.KeeperIcons
+import nl.markmaaktmedia.keeper.ui.theme.KeeperMotion
 import nl.markmaaktmedia.keeper.ui.theme.PillShape
 import java.util.Locale
 
 /** Zoomniveau van een dubbele tik, en het hoogste dat knijpen toelaat. */
 private const val DOUBLE_TAP_ZOOM = 3f
 private const val MAX_ZOOM = 8f
+/** Hoe lang dubbeltikken om in of uit te zoomen duurt. */
+private const val ZOOM_MS = 300
 /** Langste kant van het scherpe beeld dat bij inzoomen wordt geladen. */
 private const val DETAIL_EDGE = 4096
 /** Het beeld dat je ziet zonder in te zoomen. */
@@ -409,6 +412,9 @@ private fun ZoomablePhoto(photo: Photo, active: Boolean, onZoomed: (Boolean) -> 
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
     var box by remember { mutableStateOf(IntSize.Zero) }
+    val zoomScope = rememberCoroutineScope()
+    // Dubbeltikken in- of uitzoomen loopt als animatie; een vinger op het scherm breekt hem af en neemt het over.
+    var zoomJob by remember { mutableStateOf<Job?>(null) }
     val preview: ImageBitmap? by produceState(scanner.cachedLarge(photo.item, PREVIEW_EDGE)?.asImageBitmap() ?: scanner.cached(photo.item, 360)?.asImageBitmap(), photo.item.id) {
         scanner.large(photo.item, PREVIEW_EDGE)?.let { value = it.asImageBitmap() }
     }
@@ -432,11 +438,23 @@ private fun ZoomablePhoto(photo: Photo, active: Boolean, onZoomed: (Boolean) -> 
             .onSizeChanged { box = it }
             .pointerInput(Unit) {
                 detectTapGestures(onDoubleTap = { tap ->
-                    if (scale > 1.05f) { scale = 1f; offset = Offset.Zero }
+                    // Uitzoomen gaat terug naar het geheel; inzoomen houdt het getikte punt onder je vinger.
+                    val toScale: Float
+                    val toOffset: Offset
+                    if (scale > 1.05f) { toScale = 1f; toOffset = Offset.Zero }
                     else {
                         val center = Offset(size.width / 2f, size.height / 2f)
-                        scale = DOUBLE_TAP_ZOOM
-                        offset = clamp((center - tap) * (DOUBLE_TAP_ZOOM - 1f), DOUBLE_TAP_ZOOM)
+                        toScale = DOUBLE_TAP_ZOOM
+                        toOffset = clamp((center - tap) * (DOUBLE_TAP_ZOOM - 1f), DOUBLE_TAP_ZOOM)
+                    }
+                    val fromScale = scale
+                    val fromOffset = offset
+                    zoomJob?.cancel()
+                    zoomJob = zoomScope.launch {
+                        animate(0f, 1f, animationSpec = tween(ZOOM_MS, easing = KeeperMotion.Standard)) { t, _ ->
+                            scale = fromScale + (toScale - fromScale) * t
+                            offset = Offset(fromOffset.x + (toOffset.x - fromOffset.x) * t, fromOffset.y + (toOffset.y - fromOffset.y) * t)
+                        }
                     }
                 })
             }
@@ -448,6 +466,9 @@ private fun ZoomablePhoto(photo: Photo, active: Boolean, onZoomed: (Boolean) -> 
                         if (scale > 1f || event.changes.size > 1) {
                             val zoom = event.calculateZoom()
                             val pan = event.calculatePan()
+                            // Beweegt een vinger tijdens het in- of uitzoomen, dan stopt de animatie waar hij is en neem jij het over. Alleen
+                            // aanraken niet: de tweede tik van het dubbeltikken zelf mag de animatie die hij net start niet afbreken.
+                            if (zoom != 1f || pan != Offset.Zero) zoomJob?.cancel()
                             val centroid = event.calculateCentroid(useCurrent = false)
                             val newScale = (scale * zoom).coerceIn(1f, MAX_ZOOM)
                             if (centroid.isSpecified()) {
