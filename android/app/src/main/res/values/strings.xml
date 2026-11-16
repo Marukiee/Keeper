@@ -161,7 +161,7 @@
     <string name="appearance_light">Light</string>
     <string name="appearance_dark">Dark</string>
     <string name="appearance_black">Pure black</string>
-    <string name="appearance_black_sub">For OLED screens, saves a little battery. Off by default.</string>
+    <string name="appearance_black_sub">For OLED screens, saves a little battery.</string>
     <string name="appearance_accent">Accent</string>
     <string name="appearance_style">Palette style</string>
     <!-- Convert -->

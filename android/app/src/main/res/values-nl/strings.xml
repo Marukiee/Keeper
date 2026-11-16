@@ -159,7 +159,7 @@
     <string name="appearance_light">Licht</string>
     <string name="appearance_dark">Donker</string>
     <string name="appearance_black">Puur zwart</string>
-    <string name="appearance_black_sub">Voor OLED-schermen, spaart een beetje batterij. Standaard uit.</string>
+    <string name="appearance_black_sub">Voor OLED-schermen, spaart een beetje batterij.</string>
     <string name="appearance_accent">Accent</string>
     <string name="appearance_style">Paletstijl</string>
     <!-- Omzetten -->
