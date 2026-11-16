@@ -36,7 +36,9 @@ object Classifier {
             val hdr = probes[item.id]?.hasGainMap == true
             val lightroom = inLightroom(item)
             val galleryCopy = isGalleryEdit(item.name)
-            val isDone = item.name.lowercase() in done
+            // Klaar is de omgekeerde vraag van de naam in de uitvoermap (zie OutputName). Een DNG telt alleen als hij bewaard is: die naam kan ook
+            // van een JPG komen.
+            val isDone = OutputName.of(item, lightroomFolder).lowercase() in done && (!item.isDng || item.name in kept)
             val isOriginal = !isDone && !lightroom && !galleryCopy
             // Is er van dit origineel een bewerking? Een Lightroom-export met dezelfde naam, of een Galerij-kopie met dezelfde opnametijd.
             val editIds = when {

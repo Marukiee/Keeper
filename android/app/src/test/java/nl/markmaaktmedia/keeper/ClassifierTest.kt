@@ -128,4 +128,29 @@ class ClassifierTest {
         // 50,3 MP x 1,0 bpp = 6,3 MB; de kleine foto blijft op 0,4 MB
         assertEquals(6_291_456L + 400_000L, s.expectedBytes)
     }
+
+    // De naam in de uitvoermap bepaalt "klaar" (zie OutputName): per soort bron één vaste naam.
+    @Test fun keptRawIsDoneWhenItsCameraVersionIsInTheOutputFolder() {
+        val raw = item("IMG20261114133431.dng")
+        assertEquals(Status.Done, run(listOf(raw), done = setOf("IMG20261114133431.jpg"))[raw.name])
+        // Niet bewaard: dezelfde naam kan van een JPG komen, dus de RAW blijft wachten.
+        assertEquals(Status.NeedsEdit, run(listOf(raw), done = setOf("IMG20261114133431.jpg"), keepAll = false)[raw.name])
+    }
+
+    @Test fun lightroomExportIsDoneOnlyUnderItsOwnName() {
+        val raw = item("IMG20261114133431.dng"); val export = item("IMG20261114133431.jpg", path = "Pictures/AdobeLightroom/")
+        // De camera-versie van de RAW heet IMG...jpg; dat maakt de export niet klaar.
+        val camera = run(listOf(raw, export), done = setOf("IMG20261114133431.jpg"))
+        assertEquals(Status.Done, camera[raw.name]); assertEquals(Status.LightroomExport, camera[export.name])
+        // Onder zijn eigen naam wel, en dan blijft de RAW zijn eigen werk doen.
+        val both = run(listOf(raw, export), done = setOf("IMG20261114133431-lr.jpg"))
+        assertEquals(Status.Done, both[export.name]); assertEquals(Status.CameraVersion, both[raw.name])
+    }
+
+    @Test fun cameraJpgAndItsLightroomExportAreDoneSeparately() {
+        val jpg = item("IMG20261114133431.jpg"); val export = item("IMG20261114133431.jpg", path = "Pictures/AdobeLightroom/")
+        val r = Classifier.classify(listOf(jpg, export), emptyMap(), emptySet(), setOf(jpg.name), setOf("IMG20261114133431.jpg"), "Pictures/AdobeLightroom/")
+        assertEquals(Status.Done, r.first { it.item.id == jpg.id }.status)
+        assertEquals(Status.LightroomExport, r.first { it.item.id == export.id }.status)
+    }
 }
