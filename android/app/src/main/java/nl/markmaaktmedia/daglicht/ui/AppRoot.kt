@@ -125,7 +125,8 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
                 items = items,
                 selectedIndex = tab,
                 onSelect = { tab = it; sub = Sub.None },
-                modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 12.dp),
+                // Zoals in Tandem: 20 dp van de zijkanten, niet tot de rand.
+                modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(horizontal = 20.dp, vertical = 12.dp),
             )
         }
     }

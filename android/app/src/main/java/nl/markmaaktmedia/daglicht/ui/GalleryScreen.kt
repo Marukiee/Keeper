@@ -161,7 +161,7 @@ fun GalleryScreen(
                 else -> PhotoGrid(entries, shown, todayLabel, yesterdayLabel, today, onSelect, onOpen) { label, photos -> cleanup = label to photos }
             }
             if (hasPermission && state.photos.isNotEmpty()) {
-                SelectionBar(state, onOverview, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(start = 16.dp, end = 16.dp, bottom = 92.dp))
+                SelectionBar(state, onOverview, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(start = 20.dp, end = 20.dp, bottom = 90.dp))
             }
         }
     }
