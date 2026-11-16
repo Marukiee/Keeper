@@ -130,6 +130,10 @@
     <string name="settings_raw_look">Lightroom-preset</string>
     <string name="settings_raw_look_sub">Geldt als er geen camera-JPG naast de RAW staat die laat zien welke preset hij had. Lightroom kent de camerapresets niet, dus Keeper zet de look in het bestand dat hij opent.</string>
     <string name="look_none">Geen</string>
-    <string name="edit_preset">Preset: %1$s</string>
-    <string name="edit_preset_missing">Preset: %1$s (nog geen look)</string>
+    <string name="edit_preset_none">Geen preset</string>
+    <string name="edit_preset_missing">%1$s, nog geen look</string>
+    <plurals name="edit_sub_count">
+        <item quantity="one">%1$d RAW-foto zonder Lightroom-export</item>
+        <item quantity="other">%1$d RAW-foto\'s zonder Lightroom-export</item>
+    </plurals>
 </resources>

@@ -132,6 +132,10 @@
     <string name="settings_raw_look">Lightroom preset</string>
     <string name="settings_raw_look_sub">Used when a RAW has no camera JPG next to it that shows which preset it had. Lightroom has no camera presets, so Keeper puts the look in the file it opens.</string>
     <string name="look_none">None</string>
-    <string name="edit_preset">Preset: %1$s</string>
-    <string name="edit_preset_missing">Preset: %1$s (no look yet)</string>
+    <string name="edit_preset_none">No preset</string>
+    <string name="edit_preset_missing">%1$s, no look yet</string>
+    <plurals name="edit_sub_count">
+        <item quantity="one">%1$d RAW photo without a Lightroom export</item>
+        <item quantity="other">%1$d RAW photos without a Lightroom export</item>
+    </plurals>
 </resources>

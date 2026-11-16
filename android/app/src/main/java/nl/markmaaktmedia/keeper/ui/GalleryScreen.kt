@@ -97,7 +97,7 @@ private sealed interface Entry {
 
 private val zone: ZoneId get() = ZoneId.systemDefault()
 // In de taal van de app, op het moment van gebruiken.
-private fun dayFormat() = DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.getDefault())
+internal fun dayFormat() = DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.getDefault())
 
 /**
  * De startpagina: een galerij van wat er nieuw is. Tik op een foto om hem groot te bekijken en in te zoomen. Houd ingedrukt
@@ -303,7 +303,7 @@ private fun PhotoGrid(
     }
 }
 
-private fun dayLabel(day: LocalDate, today: LocalDate, todayLabel: String, yesterdayLabel: String) = when (day) {
+internal fun dayLabel(day: LocalDate, today: LocalDate, todayLabel: String, yesterdayLabel: String) = when (day) {
     today -> todayLabel
     today.minusDays(1) -> yesterdayLabel
     else -> day.format(dayFormat())
