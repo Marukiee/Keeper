@@ -21,6 +21,11 @@ Debug-hulp: `ConvertDebugReceiver` (alleen debug-build, via `adb shell am broadc
 Warm flash (`warmflash/`): het filter is te benaderen met een 3D-LUT plus radiaal vignet, gefit op 19 foto-paren (bron uit de trailer, eindbeeld): gemiddeld dE76 2,7 op
 foto's die niet in de training zaten (zonder correctie 17,3). Scripts in `prototype/warmflash_*.py`. Nog open: met RAW's toetsen (Lightroom-export tegen de camera-versie in de DNG).
 
+Welke preset gebruikt is (gemeten op 2026-11-16, Find X9 Ultra): in de Oppo-trailer van JPG's en van de kleine DNG's (2 tot 4 MB) zit `master.mode.preset.info`
+(496 bytes): f32 1.0, u32 sterkte (100), de naam als ASCII op byte 236 ("Warm flash", "Fresh", "Vintage", "Standard"). Geen preset gekozen: dan ontbreekt het blok.
+Gewone EXIF en XMP bevatten niets. De grote DNG's (17 tot 94 MB, 50 en 200 MP) hebben geen trailer en dus geen preset-aanwijzing; daar moet de preset uit de
+omgeving (JPG vlak ernaast) of van de gebruiker komen. `prototype/adobe_look.py` schrijft en leest Adobe-profielen (Look) met een 3D-LUT (RGBTable), getest tegen echte Lightroom-bestanden.
+
 Besluiten van Mark (2026-11-16): tone map **normaal** (belichting 0,90, knie 0,45, mix 0,5, piek uit de inhoud gemeten) is de
 standaard; JPEG-kwaliteit jpegli **q94** (instelbaar q90 tot q95); OK voor fase 1.
 
