@@ -72,6 +72,13 @@ class ClassifierTest {
         assertEquals(listOf(bad.name), photos.filter { it.cleanable }.map { it.item.name })
     }
 
+    @Test fun cameraJpgWithLightroomExportIsNeverCleaned() {
+        val original = item("IMG20261114120548.jpg"); val export = item("IMG20261114120548.jpg", path = "Pictures/AdobeLightroom/")
+        val photos = Classifier.classify(listOf(original, export), emptyMap(), emptySet(), emptySet(), emptySet(), "Pictures/AdobeLightroom/")
+        assertEquals(Status.OriginalExported, photos.first { it.item.id == original.id }.status)
+        assertEquals(emptyList<String>(), photos.filter { it.cleanable }.map { it.item.name })
+    }
+
     @Test fun lightroomExportsStayAlongUnlessMarkTurnsThemOff() {
         val export = item("IMG1.jpg", path = "Pictures/AdobeLightroom/")
         assertEquals(Status.LightroomExport, run(listOf(export), keepAll = false)[export.name])

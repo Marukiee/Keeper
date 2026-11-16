@@ -1,5 +1,6 @@
 package nl.markmaaktmedia.daglicht.ui
 
+import android.os.SystemClock
 import android.widget.Toast
 import androidx.annotation.StringRes
 import androidx.compose.animation.core.animateDpAsState
@@ -216,6 +217,9 @@ private fun PhotoGrid(
     val haptics = LocalHapticFeedback.current
     val byId = remember(shown) { shown.associateBy { it.item.id } }
     val select by rememberUpdatedState(onSelect)
+    // Een lange druk eindigt ook in een tik; die mag de foto niet openen. De volgorde waarin tik en slepen klaar zijn
+    // is niet vast, dus tellen we de tijd sinds het laatste lange-druk-moment.
+    val lastLongPress = remember { longArrayOf(0L) }
 
     LazyVerticalGrid(
         columns = GridCells.Fixed(3),
@@ -239,7 +243,7 @@ private fun PhotoGrid(
             }
             detectDragGesturesAfterLongPress(
                 onDragStart = { position ->
-                    seen.clear(); mode = null
+                    seen.clear(); mode = null; lastLongPress[0] = SystemClock.uptimeMillis()
                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                     hit(position)?.let(::apply)
                 },
@@ -251,8 +255,8 @@ private fun PhotoGrid(
                     if (change.position.y < edge) scope.launch { gridState.scrollBy(-36f) }
                     else if (change.position.y > size.height - edge) scope.launch { gridState.scrollBy(36f) }
                 },
-                onDragEnd = { seen.clear(); mode = null },
-                onDragCancel = { seen.clear(); mode = null },
+                onDragEnd = { seen.clear(); mode = null; lastLongPress[0] = SystemClock.uptimeMillis() },
+                onDragCancel = { seen.clear(); mode = null; lastLongPress[0] = SystemClock.uptimeMillis() },
             )
         },
     ) {
@@ -262,7 +266,9 @@ private fun PhotoGrid(
                     val label = dayLabel(entry.day, today, todayLabel, yesterdayLabel)
                     DayHeader(label, entry.photos, onSelect) { onCleanup(label, entry.photos) }
                 }
-                is Entry.Cell -> Tile(entry.photo, { onSelect(listOf(entry.photo), !entry.photo.selected) }, { onOpen(entry.photo, shown) })
+                is Entry.Cell -> Tile(entry.photo, { onSelect(listOf(entry.photo), !entry.photo.selected) }, {
+                    if (SystemClock.uptimeMillis() - lastLongPress[0] > 500L) onOpen(entry.photo, shown)
+                })
             }
         }
     }
@@ -317,7 +323,7 @@ private fun Tile(photo: Photo, onToggle: () -> Unit, onOpen: () -> Unit) {
     val dim = if (photo.selectable) 1f else 0.45f
     val badge = when {
         photo.status == Status.Done -> R.string.tile_done
-        photo.status == Status.RawEdited -> R.string.tile_edited
+        photo.status == Status.RawEdited || photo.status == Status.OriginalExported -> R.string.tile_edited
         photo.status == Status.OriginalReplaced -> R.string.tile_original
         photo.item.isDng -> R.string.tile_raw
         else -> null

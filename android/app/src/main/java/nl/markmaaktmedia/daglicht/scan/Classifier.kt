@@ -44,6 +44,7 @@ object Classifier {
                     else -> Status.NeedsEdit
                 }
                 item.isJpeg && item.dateTakenMs > 0 && item.dateTakenMs in editedTimes -> Status.OriginalReplaced
+                item.isJpeg && item.baseName in exportedBases -> Status.OriginalExported
                 // Bewaren is een bewuste keuze; zonder keuze gaat een camera-JPG niet mee.
                 item.isJpeg && item.name !in kept -> Status.NotKept
                 item.isJpeg -> if (hdr) Status.Convert else Status.AsIs

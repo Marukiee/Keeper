@@ -63,6 +63,8 @@ private const val DOUBLE_TAP_ZOOM = 3f
 private const val MAX_ZOOM = 8f
 /** Langste kant van het scherpe beeld dat bij inzoomen wordt geladen. */
 private const val DETAIL_EDGE = 4096
+/** Het beeld dat je ziet zonder in te zoomen. */
+private const val PREVIEW_EDGE = 1800
 
 /**
  * Eén foto groot, met de acties erbij: bewaren, in Lightroom openen (RAW) en naar de prullenbak. Veeg om naar de
@@ -146,13 +148,13 @@ private fun ZoomablePhoto(photo: Photo, active: Boolean, onZoomed: (Boolean) -> 
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
     var box by remember { mutableStateOf(IntSize.Zero) }
-    val preview: ImageBitmap? by produceState(scanner.cached(photo.item, 1600)?.asImageBitmap(), photo.item.id) {
-        if (value == null) value = scanner.thumbnail(photo.item, 1600)?.asImageBitmap()
+    val preview: ImageBitmap? by produceState(scanner.cachedLarge(photo.item, PREVIEW_EDGE)?.asImageBitmap() ?: scanner.cached(photo.item, 360)?.asImageBitmap(), photo.item.id) {
+        scanner.large(photo.item, PREVIEW_EDGE)?.let { value = it.asImageBitmap() }
     }
     var detail by remember(photo.item.id) { mutableStateOf<ImageBitmap?>(null) }
     val zoomedIn = scale > 1.05f
     LaunchedEffect(photo.item.id, zoomedIn) {
-        if (zoomedIn && detail == null) detail = scanner.detail(photo.item, DETAIL_EDGE)?.asImageBitmap()
+        if (zoomedIn && detail == null) detail = scanner.large(photo.item, DETAIL_EDGE)?.asImageBitmap()
     }
     LaunchedEffect(zoomedIn, active) { if (active) onZoomed(zoomedIn) }
 

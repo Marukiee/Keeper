@@ -41,6 +41,8 @@ enum class Status {
     RawEdited,
     /** Origineel waarvan een Galerij-bewerking bestaat: het origineel blijft liggen. */
     OriginalReplaced,
+    /** Camera-JPG waarvan een Lightroom-export bestaat: het origineel blijft liggen en Opruimen laat het staan. */
+    OriginalExported,
     /** Camera-JPG die Mark niet bewaard heeft: gaat niet mee en kan met Opruimen naar de prullenbak. */
     NotKept,
     /** Lightroom-export of Galerij-bewerking die Mark zelf uitzet: gaat niet mee, blijft altijd staan. */

@@ -97,7 +97,7 @@ private fun Breakdown(state: UiState, onOpenEdit: () -> Unit) {
     val needsEdit = photos.count { it.status == Status.NeedsEdit }
     val notKept = photos.count { it.status == Status.NotKept }
     val skipped = photos.count { it.status == Status.Skipped }
-    val left = photos.count { it.status == Status.RawEdited || it.status == Status.OriginalReplaced }
+    val left = photos.count { it.status == Status.RawEdited || it.status == Status.OriginalReplaced || it.status == Status.OriginalExported }
     val done = photos.count { it.status == Status.Done }
     SettingsGroup {
         val rows = buildList<@Composable (Int, Int) -> Unit> {

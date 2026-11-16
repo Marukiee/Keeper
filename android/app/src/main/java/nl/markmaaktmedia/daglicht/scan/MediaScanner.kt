@@ -74,6 +74,14 @@ class MediaScanner(private val context: Context, private val prefs: DaglichtPref
             ?.also { cache.put("${item.id}:$edge", it) }
     }
 
+    /** Een groot beeld voor het bekijken: scherper dan Android's eigen miniatuur, en bewaard voor de volgende keer. */
+    suspend fun large(item: MediaItem, edge: Int): Bitmap? {
+        cache.get("${item.id}:L$edge")?.let { return it }
+        return detail(item, edge)?.also { cache.put("${item.id}:L$edge", it) }
+    }
+
+    fun cachedLarge(item: MediaItem, edge: Int): Bitmap? = cache.get("${item.id}:L$edge")
+
     /** Wat al eerder is gemaakt, zodat terugscrollen in de galerij niet opnieuw laadt. */
     fun cached(item: MediaItem, edge: Int): Bitmap? = cache.get("${item.id}:$edge")
 

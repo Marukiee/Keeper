@@ -15,6 +15,7 @@ val Status.label: Int
         Status.CameraVersion -> R.string.status_camera
         Status.RawEdited -> R.string.status_raw_edited
         Status.OriginalReplaced -> R.string.status_replaced
+        Status.OriginalExported -> R.string.status_original_exported
         Status.NotKept -> R.string.status_not_kept
         Status.Skipped -> R.string.status_skipped
         Status.Done -> R.string.status_done
