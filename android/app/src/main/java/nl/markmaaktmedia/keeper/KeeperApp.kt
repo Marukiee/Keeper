@@ -24,6 +24,7 @@ class KeeperApp : Application() {
         super.onCreate()
         graph = Graph(this)
         Channels.create(this)
+        AppLanguage.defaultToEnglishOnce(this)
     }
 }
 

@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Keeper</string>
+    <string name="channel_update">Updates</string>
+    <string name="channel_update_desc">Meldingen over nieuwe versies van Keeper</string>
+
+    <string name="nav_gallery">Galerij</string>
+    <string name="nav_edit">Bewerken</string>
+    <string name="nav_settings">Instellingen</string>
+
+    <string name="today_title">Overzicht</string>
+    <string name="today_since">Nieuwe foto\'s sinds %1$s</string>
+    <string name="today_going">foto\'s bewaard</string>
+    <string name="today_going_one">foto bewaard</string>
+    <string name="today_sizes">Nu %1$s, straks ongeveer %2$s</string>
+    <string name="today_saves">Dat scheelt ongeveer %1$s</string>
+    <string name="today_sizes_note">Een schatting. De echte grootte komt na het omzetten.</string>
+    <string name="today_section">Wat er met de foto\'s gebeurt</string>
+    <string name="today_convert">Omzetten naar SDR</string>
+    <string name="today_convert_sub">JPG met HDR en camera-versies van RAW</string>
+    <string name="today_asis">Gaan mee zoals ze zijn</string>
+    <string name="today_asis_sub">Lightroom-exports, Galerij-bewerkingen en JPG\'s zonder HDR</string>
+    <string name="today_needs_edit">Nog bewerken</string>
+    <string name="today_needs_edit_sub">RAW die op jou wacht</string>
+    <string name="today_not_kept">Niet bewaard</string>
+    <string name="today_skipped">Overgeslagen</string>
+    <string name="today_left">Blijft liggen</string>
+    <string name="today_left_sub">RAW met een export en originelen met een Galerij-bewerking</string>
+    <string name="today_done">Al klaar</string>
+    <string name="today_prepare">Alles omzetten</string>
+    <string name="today_prepare_soon">Het omzetten komt in de volgende versie. Nu kun je de foto\'s al bewaren en opruimen.</string>
+    <string name="today_empty_title">Geen nieuwe foto\'s</string>
+    <string name="today_empty_body">Er is niets nieuws sinds %1$s.</string>
+
+    <string name="permission_title">Keeper mag je foto\'s niet zien</string>
+    <string name="permission_body">Alleen lezen: Keeper kijkt welke foto\'s nieuw zijn en wat ermee moet. Er wordt niets gewijzigd of verwijderd.</string>
+    <string name="permission_action">Toegang geven</string>
+
+    <string name="review_lightroom">Lightroom</string>
+    <string name="review_trash">Verwijderen</string>
+
+    <string name="status_convert">Bewaard, HDR wordt omgezet</string>
+    <string name="status_asis">Bewaard, gaat mee zoals het is</string>
+    <string name="status_lightroom">Lightroom-export, gaat mee zoals het is</string>
+    <string name="status_gallery">Galerij-bewerking, gaat mee zoals het is</string>
+    <string name="status_needs_edit">RAW, nog bewerken</string>
+    <string name="status_camera">RAW bewaard, camera-versie wordt omgezet</string>
+    <string name="status_raw_edited">RAW met export, blijft liggen</string>
+    <string name="status_replaced">Origineel, de Galerij-bewerking gaat mee</string>
+    <string name="status_original_exported">Origineel met Lightroom-export, blijft liggen</string>
+    <string name="status_not_kept">Niet bewaard</string>
+    <string name="status_skipped">Overgeslagen</string>
+    <string name="status_done">Al klaar</string>
+
+    <string name="edit_title">Nog bewerken</string>
+    <string name="edit_sub">RAW-foto\'s zonder Lightroom-export</string>
+    <string name="edit_open">Lightroom</string>
+    <string name="edit_camera">Camera</string>
+    <string name="edit_camera_chosen">Camera-versie gekozen</string>
+    <string name="edit_camera_undo">Toch zelf</string>
+    <string name="edit_empty_title">Niets meer te bewerken</string>
+    <string name="edit_empty_body">Alle RAW\'s hebben een export of een gekozen camera-versie.</string>
+    <string name="edit_no_lightroom">Lightroom is niet gevonden</string>
+
+    <string name="settings_title">Instellingen</string>
+    <string name="settings_folders">Mappen</string>
+    <string name="settings_output">Uitvoermap</string>
+    <string name="settings_lightroom">Lightroom-map</string>
+    <string name="settings_cshot">Serie-opnamen meenemen</string>
+    <string name="settings_cshot_sub">De map Cshot in DCIM/Camera</string>
+    <string name="settings_convert">Omzetten</string>
+    <string name="settings_quality">Kwaliteit</string>
+    <string name="settings_quality_value">jpegli, q94</string>
+    <string name="settings_tonemap">Tone map</string>
+    <string name="settings_tonemap_value">Normaal</string>
+    <string name="settings_app">App</string>
+    <string name="settings_language">Taal</string>
+    <string name="settings_updates_sub">Versie, controleren op een nieuwe</string>
+    <string name="settings_back">Terug</string>
+
+    <string name="gallery_title">Galerij</string>
+    <string name="gallery_sub">%1$d foto\'s sinds %2$s</string>
+    <string name="gallery_selected">%1$d bewaard</string>
+    <string name="gallery_deselect_all">Selectie annuleren</string>
+    <string name="gallery_cleared">Selectie gewist</string>
+    <string name="gallery_undo">Ongedaan maken</string>
+    <string name="gallery_none">Nog niets bewaard</string>
+    <string name="gallery_prepare">Omzetten</string>
+    <string name="gallery_prepare_soon">Het omzetten komt in de volgende versie</string>
+    <string name="gallery_no_favorites_title">Geen favorieten</string>
+    <string name="gallery_no_favorites_body">Hier staan foto\'s met een hartje uit de Galerij van je telefoon, als die het hartje in Android opslaat.</string>
+    <string name="gallery_empty_filter">Niets in deze selectie</string>
+    <string name="filter_all">Alles</string>
+    <string name="filter_favorites">Favorieten</string>
+    <string name="filter_selected">Bewaard</string>
+    <string name="filter_raw">RAW</string>
+    <string name="day_today">Vandaag</string>
+    <string name="day_yesterday">Gisteren</string>
+    <string name="tile_raw">RAW</string>
+    <string name="tile_edited">Bewerkt</string>
+    <string name="tile_original">Origineel</string>
+    <string name="tile_done">Klaar</string>
+    <string name="viewer_progress">%1$d van %2$d</string>
+    <string name="viewer_keep">Bewaren</string>
+    <string name="viewer_kept">Bewaard</string>
+
+    <string name="cleanup_button">Opruimen (%1$d)</string>
+    <string name="cleanup_title">Opruimen: %1$s</string>
+    <string name="cleanup_body">%1$d niet bewaarde foto\'s van %2$s gaan naar de prullenbak.</string>
+    <string name="cleanup_none_kept">Let op: je hebt op deze dag nog niets bewaard.</string>
+    <string name="cleanup_stays">Blijft staan: %1$s.</string>
+    <string name="cleanup_kept">%1$d bewaard</string>
+    <string name="cleanup_favorites">%1$d favoriet</string>
+    <string name="cleanup_exports">%1$d Lightroom-export of bewerking</string>
+    <string name="cleanup_raws">%1$d RAW</string>
+    <string name="cleanup_note">Android vraagt daarna nog om bevestiging. In de prullenbak kun je ze terugzetten.</string>
+    <string name="cleanup_cancel">Annuleren</string>
+    <string name="cleanup_confirm">%1$d naar prullenbak</string>
+
+    <string name="settings_quality_sub">Hoger is scherper en groter</string>
+    <string name="settings_quality_estimate">Ongeveer %1$s bit per pixel, een foto van 50 MP wordt dan ongeveer %2$s</string>
+    <string name="settings_tonemap_sub">Hoe de HDR-lichten naar SDR gaan</string>
+    <string name="tonemap_licht">Licht</string>
+    <string name="tonemap_normaal">Normaal</string>
+    <string name="tonemap_lichten">Lichten</string>
+    <string name="tonemap_licht_body">Het helderst. De lucht kan bijna wit worden.</string>
+    <string name="tonemap_normaal_body">Evenwichtig: opgehelderd met zachte lichten.</string>
+    <string name="tonemap_lichten_body">Lichten behouden: wolken en lichten houden meer tekening, het beeld blijft wat donkerder.</string>
+</resources>

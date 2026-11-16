@@ -6,7 +6,8 @@ import java.text.DecimalFormatSymbols
 import java.util.Date
 import java.util.Locale
 
-private val nl = Locale("nl", "NL")
+// De taal van de app, op het moment van gebruiken, zodat een andere taal meteen meegaat.
+private val nl: Locale get() = Locale.getDefault()
 
 /** 1,2 GB, 340 MB: decimale eenheden zoals Android zelf ze toont. */
 fun formatBytes(bytes: Long): String {

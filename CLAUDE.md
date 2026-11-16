@@ -20,7 +20,7 @@ zonder hartje naar de prullenbak; RAW's, exports, bewerkingen en hun originelen 
 
 ## Conventies (zelfde als Tandem en PixelPlayer)
 
-- Nederlandse UI. Nooit em-dashes. Korte commentaren die uitleggen waarom, niet wat.
+- UI standaard **Engels** (Mark's wens, 2026-11-16), Nederlands erbij in `values-nl` en te kiezen in Instellingen (`AppLanguage`, Android 13+). Elke nieuwe string in beide bestanden. Nooit em-dashes. Korte commentaren die uitleggen waarom, niet wat.
 - Kotlin + Jetpack Compose, Material 3 Expressive. Thema, componenten en stijl overnemen uit
   `~/Documents/Apps/Tandem/android` en `~/Documents/Apps/PixelPlayer`; bij twijfel `Tandem/CLAUDE.md`
   (sectie Designtaal: Google Sans Flex met ROND 100, Material Symbols Rounded, slabs, pure zwart, springs,

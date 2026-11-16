@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import nl.markmaaktmedia.keeper.AppLanguage
 import java.util.Locale
 import nl.markmaaktmedia.keeper.scan.JpegQuality
 import nl.markmaaktmedia.keeper.scan.ToneMap
@@ -33,7 +34,8 @@ import nl.markmaaktmedia.keeper.update.UpdateState
 
 @Composable
 fun SettingsScreen(onOpenUpdates: () -> Unit, contentPadding: PaddingValues) {
-    val prefs = LocalContext.current.graph.prefs
+    val context = LocalContext.current
+    val prefs = context.graph.prefs
     val scope = rememberCoroutineScope()
     val output by prefs.outputFolder.collectAsState(initial = "")
     val lightroom by prefs.lightroomFolder.collectAsState(initial = "")
@@ -59,7 +61,7 @@ fun SettingsScreen(onOpenUpdates: () -> Unit, contentPadding: PaddingValues) {
                     SegmentedPillRow(JpegQuality.options, quality, { "q$it" }, { scope.launch { prefs.setQuality(it) } }, equalWidth = true)
                     val bpp = JpegQuality.bitsPerPixel(quality)
                     Text(
-                        stringResource(R.string.settings_quality_estimate, String.format(Locale("nl", "NL"), "%.2f", bpp), formatBytes((50_000_000L * bpp / 8).toLong())),
+                        stringResource(R.string.settings_quality_estimate, String.format(Locale.getDefault(), "%.2f", bpp), formatBytes((50_000_000L * bpp / 8).toLong())),
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
@@ -84,7 +86,13 @@ fun SettingsScreen(onOpenUpdates: () -> Unit, contentPadding: PaddingValues) {
         item {
             SectionHeader(stringResource(R.string.settings_app))
             SettingsGroup {
-                ActionRow(0, 1, KeeperIcons.Update, stringResource(R.string.settings_updates), stringResource(R.string.settings_updates_sub), onOpenUpdates)
+                ContentRow(0, 2, KeeperIcons.Language, stringResource(R.string.settings_language)) {
+                    // Het wisselen start de activity opnieuw op, dus de huidige taal komt altijd uit de actuele configuratie.
+                    val current = if (Locale.getDefault().language == "nl") "nl" else "en"
+                    val names = mapOf("en" to stringResource(R.string.language_english), "nl" to stringResource(R.string.language_dutch))
+                    SegmentedPillRow(listOf("en", "nl"), current, { names.getValue(it) }, { AppLanguage.set(context, it) }, equalWidth = true)
+                }
+                ActionRow(1, 2, KeeperIcons.Update, stringResource(R.string.settings_updates), stringResource(R.string.settings_updates_sub), onOpenUpdates)
             }
         }
     }

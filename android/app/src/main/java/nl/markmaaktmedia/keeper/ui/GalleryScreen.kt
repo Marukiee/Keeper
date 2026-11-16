@@ -2,6 +2,7 @@ package nl.markmaaktmedia.keeper.ui
 
 import android.os.SystemClock
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -36,6 +37,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import kotlinx.coroutines.delay
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
@@ -88,17 +90,22 @@ enum class GalleryFilter(@StringRes val label: Int) {
     }
 }
 
+// Een leeg scherm staat optisch iets boven het midden, en niet achter de selectiebalk en navigatiebalk onderaan.
+private val EMPTY_LIFT = 240.dp
+
 private sealed interface Entry {
     data class Header(val day: LocalDate, val photos: List<Photo>) : Entry
     data class Cell(val photo: Photo) : Entry
 }
 
 private val zone: ZoneId get() = ZoneId.systemDefault()
-private val dayFormat = DateTimeFormatter.ofPattern("EEEE d MMMM", Locale("nl", "NL"))
+// In de taal van de app, op het moment van gebruiken.
+private fun dayFormat() = DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.getDefault())
 
 /**
- * De startpagina: een galerij van wat er nieuw is. Tik op een foto om hem groot te bekijken en in te zoomen, houd ingedrukt
- * en sleep om er meer tegelijk aan of uit te zetten, tik op het rondje voor één foto. Aan betekent: gaat mee.
+ * De startpagina: een galerij van wat er nieuw is. Tik op een foto om hem groot te bekijken en in te zoomen. Houd ingedrukt
+ * (en sleep) om te selecteren: dan verschijnen de rondjes en zet een tik een foto aan of uit. Aan betekent: gaat mee.
+ * Zonder selectiemodus zijn er geen rondjes, de galerij is dan gewoon om te kijken.
  */
 @Composable
 fun GalleryScreen(
@@ -116,6 +123,9 @@ fun GalleryScreen(
     var cleanup by remember { mutableStateOf<Pair<String, List<Photo>>?>(null) }
     // Alles uitzetten kan per ongeluk; een paar seconden lang kun je het ongedaan maken.
     var cleared by remember { mutableStateOf<List<Photo>>(emptyList()) }
+    // Selectiemodus: begint met een lange druk, eindigt met het kruisje of de terugknop.
+    var selecting by rememberSaveable { mutableStateOf(false) }
+    BackHandler(enabled = selecting) { selecting = false }
     LaunchedEffect(cleared) { if (cleared.isNotEmpty()) { delay(6000); cleared = emptyList() } }
     val shown = remember(state.photos, filter) { state.photos.filter(filter::matches) }
     val today = remember { LocalDate.now(zone) }
@@ -146,17 +156,17 @@ fun GalleryScreen(
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when {
-                !hasPermission -> Box(Modifier.padding(horizontal = 20.dp)) {
+                !hasPermission -> Box(Modifier.padding(start = 20.dp, end = 20.dp, bottom = EMPTY_LIFT)) {
                     EmptyState(
                         title = stringResource(R.string.permission_title), body = stringResource(R.string.permission_body), icon = KeeperIcons.Image,
                         action = { PrimaryPillButton(stringResource(R.string.permission_action), onRequestPermission) },
                     )
                 }
                 state.loading -> PillSpinner(Modifier.padding(32.dp).align(Alignment.TopCenter))
-                state.photos.isEmpty() -> Box(Modifier.padding(horizontal = 20.dp)) {
+                state.photos.isEmpty() -> Box(Modifier.padding(start = 20.dp, end = 20.dp, bottom = EMPTY_LIFT)) {
                     EmptyState(stringResource(R.string.today_empty_title), stringResource(R.string.today_empty_body, formatDay(state.sinceMs)), icon = KeeperIcons.Image)
                 }
-                shown.isEmpty() -> Box(Modifier.padding(horizontal = 20.dp)) {
+                shown.isEmpty() -> Box(Modifier.padding(start = 20.dp, end = 20.dp, bottom = EMPTY_LIFT)) {
                     val favorites = filter == GalleryFilter.Favorites
                     EmptyState(
                         stringResource(if (favorites) R.string.gallery_no_favorites_title else R.string.gallery_empty_filter),
@@ -164,12 +174,12 @@ fun GalleryScreen(
                         icon = if (favorites) KeeperIcons.Favorite else KeeperIcons.Image,
                     )
                 }
-                else -> PhotoGrid(entries, shown, todayLabel, yesterdayLabel, today, onSelect, onOpen) { label, photos -> cleanup = label to photos }
+                else -> PhotoGrid(entries, shown, todayLabel, yesterdayLabel, today, selecting, { selecting = true }, onSelect, onOpen) { label, photos -> cleanup = label to photos }
             }
             if (hasPermission && state.photos.isNotEmpty()) {
                 SelectionBar(
-                    state, onOverview, cleared.isNotEmpty(),
-                    onClear = { val on = state.photos.filter { it.selectable && it.selected }; cleared = on; onSelect(on, false) },
+                    state, selecting, onOverview, cleared.isNotEmpty(),
+                    onClear = { val on = state.photos.filter { it.selectable && it.selected }; cleared = on; onSelect(on, false); selecting = false },
                     onUndo = { onSelect(cleared, true); cleared = emptyList() },
                     modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(start = 20.dp, end = 20.dp, bottom = 90.dp),
                 )
@@ -219,6 +229,8 @@ private fun PhotoGrid(
     todayLabel: String,
     yesterdayLabel: String,
     today: LocalDate,
+    selecting: Boolean,
+    onStartSelecting: () -> Unit,
     onSelect: (List<Photo>, Boolean) -> Unit,
     onOpen: (Photo, List<Photo>) -> Unit,
     onCleanup: (String, List<Photo>) -> Unit,
@@ -228,6 +240,7 @@ private fun PhotoGrid(
     val haptics = LocalHapticFeedback.current
     val byId = remember(shown) { shown.associateBy { it.item.id } }
     val select by rememberUpdatedState(onSelect)
+    val startSelecting by rememberUpdatedState(onStartSelecting)
     // Een lange druk eindigt ook in een tik; die mag de foto niet openen. De volgorde waarin tik en slepen klaar zijn
     // is niet vast, dus tellen we de tijd sinds het laatste lange-druk-moment.
     val lastLongPress = remember { longArrayOf(0L) }
@@ -254,7 +267,7 @@ private fun PhotoGrid(
             }
             detectDragGesturesAfterLongPress(
                 onDragStart = { position ->
-                    seen.clear(); mode = null; lastLongPress[0] = SystemClock.uptimeMillis()
+                    seen.clear(); mode = null; lastLongPress[0] = SystemClock.uptimeMillis(); startSelecting()
                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                     hit(position)?.let(::apply)
                 },
@@ -275,10 +288,13 @@ private fun PhotoGrid(
             when (entry) {
                 is Entry.Header -> {
                     val label = dayLabel(entry.day, today, todayLabel, yesterdayLabel)
-                    DayHeader(label, entry.photos, onSelect) { onCleanup(label, entry.photos) }
+                    DayHeader(label, entry.photos, selecting, onSelect) { onCleanup(label, entry.photos) }
                 }
-                is Entry.Cell -> Tile(entry.photo, { onSelect(listOf(entry.photo), !entry.photo.selected) }, {
-                    if (SystemClock.uptimeMillis() - lastLongPress[0] > 500L) onOpen(entry.photo, shown)
+                is Entry.Cell -> Tile(entry.photo, selecting, { onSelect(listOf(entry.photo), !entry.photo.selected) }, {
+                    // Een tik na een lange druk telt niet. In selectiemodus zet een tik de foto aan of uit, anders opent hij groot.
+                    if (SystemClock.uptimeMillis() - lastLongPress[0] > 500L) {
+                        if (selecting && entry.photo.selectable) onSelect(listOf(entry.photo), !entry.photo.selected) else if (!selecting) onOpen(entry.photo, shown)
+                    }
                 })
             }
         }
@@ -288,12 +304,12 @@ private fun PhotoGrid(
 private fun dayLabel(day: LocalDate, today: LocalDate, todayLabel: String, yesterdayLabel: String) = when (day) {
     today -> todayLabel
     today.minusDays(1) -> yesterdayLabel
-    else -> day.format(dayFormat)
+    else -> day.format(dayFormat())
 }
 
 /** De dag, met rechts één rondje dat alle foto's van die dag tegelijk aan of uit zet. */
 @Composable
-private fun DayHeader(label: String, photos: List<Photo>, onSelect: (List<Photo>, Boolean) -> Unit, onCleanup: () -> Unit) {
+private fun DayHeader(label: String, photos: List<Photo>, selecting: Boolean, onSelect: (List<Photo>, Boolean) -> Unit, onCleanup: () -> Unit) {
     val selectable = photos.filter { it.selectable }
     val all = selectable.isNotEmpty() && selectable.all { it.selected }
     val cleanable = photos.count { it.cleanable }
@@ -308,7 +324,7 @@ private fun DayHeader(label: String, photos: List<Photo>, onSelect: (List<Photo>
                 Text(stringResource(R.string.cleanup_button, cleanable), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.error)
             }
         }
-        if (selectable.isNotEmpty()) SelectCircle(all, { onSelect(selectable, !all) })
+        if (selecting && selectable.isNotEmpty()) SelectCircle(all, { onSelect(selectable, !all) })
     }
 }
 
@@ -327,7 +343,7 @@ private fun SelectCircle(selected: Boolean, onClick: () -> Unit, modifier: Modif
 }
 
 @Composable
-private fun Tile(photo: Photo, onToggle: () -> Unit, onOpen: () -> Unit) {
+private fun Tile(photo: Photo, selecting: Boolean, onToggle: () -> Unit, onOpen: () -> Unit) {
     val selected = photo.selected
     val scale by animateFloatAsState(if (selected) 0.88f else 1f, KeeperMotion.bouncy(), label = "tileScale")
     val corner by animateDpAsState(if (selected) 18.dp else 8.dp, KeeperMotion.bouncy(), label = "tileCorner")
@@ -344,7 +360,7 @@ private fun Tile(photo: Photo, onToggle: () -> Unit, onOpen: () -> Unit) {
             photo.item, 360,
             Modifier.fillMaxSize().graphicsLayer { scaleX = scale; scaleY = scale; alpha = dim; shape = RoundedCornerShape(corner); clip = true },
         )
-        if (photo.selectable) SelectCircle(selected, onToggle, Modifier.align(Alignment.TopStart))
+        if (selecting && photo.selectable) SelectCircle(selected, onToggle, Modifier.align(Alignment.TopStart))
         if (photo.item.isFavorite) {
             Box(Modifier.align(Alignment.TopEnd).padding(8.dp).size(24.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.32f)), contentAlignment = Alignment.Center) {
                 Icon(KeeperIcons.Favorite, null, tint = Color(0xFFFF8FA3), modifier = Modifier.size(14.dp))
@@ -359,10 +375,14 @@ private fun Tile(photo: Photo, onToggle: () -> Unit, onOpen: () -> Unit) {
     }
 }
 
-/** Onderaan: hoeveel er bewaard is en wat dat scheelt. Het kruisje zet alles uit; tik op de tekst voor het overzicht. */
+/**
+ * Onderaan: hoeveel er bewaard is en wat dat scheelt, tik op de tekst voor het overzicht. Naast de hoofdknop staat in
+ * selectiemodus het kruisje: dat annuleert de selectie (alles uit, zes seconden ongedaan te maken) en sluit de modus.
+ */
 @Composable
 private fun SelectionBar(
     state: UiState,
+    selecting: Boolean,
     onOverview: () -> Unit,
     justCleared: Boolean,
     onClear: () -> Unit,
@@ -378,20 +398,18 @@ private fun SelectionBar(
                 PrimaryPillButton(stringResource(R.string.gallery_undo), onUndo)
             } else {
                 Column(Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(
-                            if (s.goingCount == 0) stringResource(R.string.gallery_none) else stringResource(R.string.gallery_selected, s.goingCount),
-                            style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.bouncyClickable(onClick = onOverview),
-                        )
-                        if (s.goingCount > 0) KeeperIconButton(KeeperIcons.Close, stringResource(R.string.gallery_deselect_all), onClear, size = 32, iconSize = 16, background = MaterialTheme.colorScheme.surfaceContainerHighest)
-                    }
+                    Text(
+                        if (s.goingCount == 0) stringResource(R.string.gallery_none) else stringResource(R.string.gallery_selected, s.goingCount),
+                        style = MaterialTheme.typography.titleMedium, maxLines = 1,
+                        modifier = Modifier.bouncyClickable(onClick = onOverview),
+                    )
                     if (s.goingCount > 0) Text(
                         stringResource(R.string.today_sizes, formatBytes(s.currentBytes), formatBytes(s.expectedBytes)),
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
                         modifier = Modifier.bouncyClickable(onClick = onOverview),
                     )
                 }
+                if (selecting) KeeperIconButton(KeeperIcons.Close, stringResource(R.string.gallery_deselect_all), onClear, size = 44, iconSize = 20, background = MaterialTheme.colorScheme.surfaceContainerHighest)
                 PrimaryPillButton(stringResource(R.string.gallery_prepare), {
                     // Fase 1 leest alleen; het omzetten volgt na Mark's OK voor fase 2.
                     Toast.makeText(context, R.string.gallery_prepare_soon, Toast.LENGTH_SHORT).show()

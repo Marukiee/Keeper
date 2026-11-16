@@ -11,7 +11,11 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -121,7 +125,8 @@ fun ViewerScreen(
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            // IntrinsicSize.Min: de prullenbak is precies zo hoog als de pillen ernaast, ook bij een ander lettertype.
+            Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (current.selectable) {
                     if (current.selected) PrimaryPillButton(stringResource(R.string.viewer_kept), { onSelect(current, false) }, Modifier.weight(1f), icon = KeeperIcons.Check)
                     else SecondaryPillButton(stringResource(R.string.viewer_keep), { onSelect(current, true) }, Modifier.weight(1f), icon = KeeperIcons.Check)
@@ -130,7 +135,8 @@ fun ViewerScreen(
                 // Naar de prullenbak, na Android's eigen bevestiging; terug te zetten.
                 KeeperIconButton(
                     KeeperIcons.Delete, stringResource(R.string.review_trash), { onTrash(current) },
-                    size = 52, iconSize = 22, background = MaterialTheme.colorScheme.errorContainer, tint = MaterialTheme.colorScheme.onErrorContainer,
+                    Modifier.fillMaxHeight().aspectRatio(1f, matchHeightConstraintsFirst = true),
+                    size = 48, iconSize = 22, background = MaterialTheme.colorScheme.errorContainer, tint = MaterialTheme.colorScheme.onErrorContainer,
                 )
             }
         }
@@ -212,7 +218,7 @@ private fun ZoomablePhoto(photo: Photo, active: Boolean, onZoomed: (Boolean) -> 
         }
         if (zoomedIn) {
             Text(
-                String.format(Locale("nl", "NL"), "%.1f×", scale), style = MaterialTheme.typography.labelMedium, color = Color.White,
+                String.format(Locale.getDefault(), "%.1f×", scale), style = MaterialTheme.typography.labelMedium, color = Color.White,
                 modifier = Modifier.align(Alignment.TopEnd).padding(12.dp).clip(PillShape).background(Color.Black.copy(alpha = 0.5f)).padding(horizontal = 10.dp, vertical = 4.dp),
             )
         }

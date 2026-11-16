@@ -90,7 +90,7 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
     val needsEdit = state.photos.count { it.status == Status.NeedsEdit }
     val items = listOf(
         PillNavItem(stringResource(R.string.nav_gallery), { KeeperIcons.Photos }),
-        PillNavItem(stringResource(R.string.nav_edit), { KeeperIcons.Tune }, { KeeperIcons.TuneFilled }, badgeCount = needsEdit),
+        PillNavItem(stringResource(R.string.nav_edit), { KeeperIcons.Palette }, badgeCount = needsEdit),
         PillNavItem(stringResource(R.string.nav_settings), { KeeperIcons.Settings }, { KeeperIcons.SettingsFilled }),
     )
     val padding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 112.dp)
