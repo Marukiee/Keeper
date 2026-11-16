@@ -56,7 +56,15 @@ enum class Status {
  */
 enum class Edit { None, Exported, Replaced }
 
-data class Photo(val item: MediaItem, val status: Status, val hdr: Boolean, val rejected: Boolean = false, val edit: Edit = Edit.None) {
+data class Photo(
+    val item: MediaItem,
+    val status: Status,
+    val hdr: Boolean,
+    val rejected: Boolean = false,
+    val edit: Edit = Edit.None,
+    /** Welke bestanden de bewerking zijn (de Lightroom-export of Galerij-kopie), als [edit] niet [Edit.None] is. */
+    val editIds: List<Long> = emptyList(),
+) {
     /** Gaat mee naar de uitvoermap. */
     val goesAlong get() = status in ALONG
     /** Moet door de HDR-naar-SDR-conversie. */

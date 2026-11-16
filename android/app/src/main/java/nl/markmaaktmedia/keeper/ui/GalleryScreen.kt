@@ -180,7 +180,15 @@ fun GalleryScreen(
             withEdit.size,
             // Alleen de bewerkte versie: de rest wordt bewaard, de originelen met een bewerking krijgen het kruisje.
             onEditedOnly = { askEdited = false; onKeep(pickedPhotos - withEdit.toSet()); onReject(withEdit); endSelecting() },
-            onExportToo = { askEdited = false; onKeep(pickedPhotos); endSelecting() },
+            // Alleen het origineel: de bewerkingen die erbij horen gaan niet mee (kruisje) en blijven in Lightroom of de Galerij staan.
+            onOriginalOnly = {
+                askEdited = false
+                val edits = withEdit.flatMap { it.editIds }.toSet()
+                onKeep(pickedPhotos.filter { it.item.id !in edits })
+                onReject(edits.mapNotNull { byId[it] })
+                endSelecting()
+            },
+            onBoth = { askEdited = false; onKeep(pickedPhotos); endSelecting() },
             onDismiss = { askEdited = false },
         )
     }

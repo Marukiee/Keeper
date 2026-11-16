@@ -27,9 +27,9 @@ object Classifier {
     ): List<Photo> {
         val live = items.filterNot(::isIgnored)
         val inLightroom = { i: MediaItem -> i.relativePath.startsWith(lightroomFolder, ignoreCase = true) }
-        val exportedBases = live.filter(inLightroom).map { it.baseName }.toSet()
+        val exports = live.filter(inLightroom).groupBy({ it.baseName }, { it.id })
         // Een bewerkte kopie houdt de EXIF-opnametijd van het origineel; zo vinden we het origineel terug.
-        val editedTimes = live.filter { isGalleryEdit(it.name) && it.dateTakenMs > 0 }.map { it.dateTakenMs }.toSet()
+        val galleryCopies = live.filter { isGalleryEdit(it.name) && it.dateTakenMs > 0 }.groupBy({ it.dateTakenMs }, { it.id })
         val done = doneNames.map { it.lowercase() }.toSet()
 
         return live.mapNotNull { item ->
@@ -39,12 +39,16 @@ object Classifier {
             val isDone = item.name.lowercase() in done
             val isOriginal = !isDone && !lightroom && !galleryCopy
             // Is er van dit origineel een bewerking? Een Lightroom-export met dezelfde naam, of een Galerij-kopie met dezelfde opnametijd.
+            val editIds = when {
+                !isOriginal -> null
+                item.isDng -> exports[item.baseName]
+                item.isJpeg -> galleryCopies[item.dateTakenMs]?.takeIf { item.dateTakenMs > 0 } ?: exports[item.baseName]
+                else -> null
+            }.orEmpty()
             val edit = when {
-                !isOriginal -> Edit.None
-                item.isDng && item.baseName in exportedBases -> Edit.Exported
-                item.isJpeg && item.dateTakenMs > 0 && item.dateTakenMs in editedTimes -> Edit.Replaced
-                item.isJpeg && item.baseName in exportedBases -> Edit.Exported
-                else -> Edit.None
+                editIds.isEmpty() -> Edit.None
+                item.isJpeg && item.dateTakenMs > 0 && item.dateTakenMs in galleryCopies -> Edit.Replaced
+                else -> Edit.Exported
             }
             val status = when {
                 isDone -> Status.Done
@@ -64,7 +68,7 @@ object Classifier {
                 item.isJpeg -> Status.NotKept
                 else -> return@mapNotNull null
             }
-            Photo(item, status, hdr, item.name in rejected, edit)
+            Photo(item, status, hdr, item.name in rejected, edit, editIds)
         }.sortedByDescending { it.item.dateTakenMs.takeIf { t -> t > 0 } ?: it.item.dateAddedMs }
     }
 

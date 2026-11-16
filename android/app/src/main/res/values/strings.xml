@@ -146,8 +146,9 @@
         <item quantity="other">%1$d RAW photos without a Lightroom export</item>
     </plurals>
     <string name="edited_keep_title">An edited version already exists</string>
-    <string name="edited_keep_body_one">This photo already has an edited version (a Lightroom export or a Gallery copy), and that one goes along. If Keeper also exports the original, with the normal camera filter and made smaller, you end up with two versions of it.</string>
-    <string name="edited_keep_body_many">%1$d of the chosen photos already have an edited version (a Lightroom export or a Gallery copy), and those go along. If Keeper also exports the originals, with the normal camera filter and made smaller, you end up with two versions of each.</string>
-    <string name="edited_keep_only">Edited version only</string>
-    <string name="edited_keep_also">Export it too</string>
+    <string name="edited_keep_body_one">This photo already has an edited version (a Lightroom export or a Gallery copy). Which one should go along? The original comes with the normal camera filter and made smaller, and the edit stays where it is. Both gives you two versions of the same photo.</string>
+    <string name="edited_keep_body_many">%1$d of the chosen photos already have an edited version (a Lightroom export or a Gallery copy). Which one should go along? The originals come with the normal camera filter and made smaller, and the edits stay where they are. Both gives you two versions of each.</string>
+    <string name="edited_keep_only">Edited version</string>
+    <string name="edited_keep_original">Original</string>
+    <string name="edited_keep_both">Both</string>
 </resources>

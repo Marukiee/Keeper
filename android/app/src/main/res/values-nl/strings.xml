@@ -144,8 +144,9 @@
         <item quantity="other">%1$d RAW-foto\'s zonder Lightroom-export</item>
     </plurals>
     <string name="edited_keep_title">Er bestaat al een bewerkte versie</string>
-    <string name="edited_keep_body_one">Van deze foto bestaat al een bewerkte versie (Lightroom-export of Galerij-kopie), en die gaat mee. Exporteert Keeper het origineel ook, met het normale camerafilter en verkleind, dan heb je er twee versies van.</string>
-    <string name="edited_keep_body_many">Van %1$d van de gekozen foto\'s bestaat al een bewerkte versie (Lightroom-export of Galerij-kopie), en die gaan mee. Exporteert Keeper de originelen ook, met het normale camerafilter en verkleind, dan heb je van elk twee versies.</string>
-    <string name="edited_keep_only">Alleen bewerkte versie</string>
-    <string name="edited_keep_also">Ook exporteren</string>
+    <string name="edited_keep_body_one">Van deze foto bestaat al een bewerkte versie (Lightroom-export of Galerij-kopie). Welke gaat mee? Het origineel gaat mee met het normale camerafilter en verkleind, en de bewerking blijft waar hij staat. Allebei geeft twee versies van dezelfde foto.</string>
+    <string name="edited_keep_body_many">Van %1$d van de gekozen foto\'s bestaat al een bewerkte versie (Lightroom-export of Galerij-kopie). Welke gaat mee? De originelen gaan mee met het normale camerafilter en verkleind, en de bewerkingen blijven waar ze staan. Allebei geeft van elk twee versies.</string>
+    <string name="edited_keep_only">Bewerkte versie</string>
+    <string name="edited_keep_original">Origineel</string>
+    <string name="edited_keep_both">Allebei</string>
 </resources>

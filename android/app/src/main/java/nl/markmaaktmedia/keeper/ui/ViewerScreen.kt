@@ -364,7 +364,14 @@ fun ViewerScreen(
         EditedKeepDialog(
             1,
             onEditedOnly = { askEdited = false; onReject(asked); next() },
-            onExportToo = { askEdited = false; onSelect(asked, true); next() },
+            // Alleen het origineel: de bewerking (Lightroom-export of Galerij-kopie) gaat niet mee en blijft waar hij staat.
+            onOriginalOnly = {
+                askEdited = false
+                onSelect(asked, true)
+                photos.filter { it.item.id in asked.editIds }.forEach(onReject)
+                next()
+            },
+            onBoth = { askEdited = false; onSelect(asked, true); next() },
             onDismiss = { askEdited = false },
         )
     }

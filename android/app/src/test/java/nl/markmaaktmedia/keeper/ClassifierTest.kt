@@ -72,6 +72,10 @@ class ClassifierTest {
             assertEquals(true, p.askBeforeKeeping)
         }
         assertEquals(Edit.Replaced, photos.first { it.item.id == original.id }.edit)
+        // De bewerking is terug te vinden, zodat "alleen het origineel" die kan overslaan.
+        assertEquals(listOf(export.id), photos.first { it.item.id == raw.id }.editIds)
+        assertEquals(listOf(edit.id), photos.first { it.item.id == original.id }.editIds)
+        assertEquals(emptyList<Long>(), photos.first { it.item.id == export.id }.editIds)
     }
 
     @Test fun galleryEditReplacesTheOriginalByCaptureTime() {
