@@ -1,4 +1,4 @@
-# Daglicht
+# Keeper
 
 Android-app voor Mark's Oppo Find X9 Ultra (CPH2841, Android 17, geen root). Houdt nieuwe foto's bij en maakt
 aan het eind van de dag met één knop SDR-JPEG's van de gekozen foto's: kleiner, zonder HDR, alle metadata intact,
@@ -29,9 +29,10 @@ zonder hartje naar de prullenbak; RAW's, exports, bewerkingen en hun originelen 
 - **Automatische updates precies zoals Tandem** (Mark's wens, 2026-11-16): update-checker die de GitHub-releasesfeed
   leest, workflow die de APK onder een vaste naam aan de release hangt, en een vaste release-sleutel zodat
   bijwerken zonder verwijderen werkt (`Tandem/CLAUDE.md`, sectie "Signing en updates"). Kopieer de aanpak, de
-  checker en de workflow uit Tandem. Een nieuwe sleutel (`~/keystores/daglicht-release.jks`) en een GitHub-repo zijn
+  checker en de workflow uit Tandem. Een nieuwe sleutel (`~/keystores/keeper-release.jks`) en een GitHub-repo zijn
   uitgaand en onomkeerbaar: eerst Mark's OK.
-- Package-voorstel: `nl.markmaaktmedia.daglicht`, minSdk 31, compileSdk 36, arm64 only.
+- Package: `nl.markmaaktmedia.keeper` (app heette eerst Daglicht; Mark koos Keeper op 2026-11-16), minSdk 31, compileSdk 36, arm64 only.
+  De projectmap heet nog `Daglicht`. GitHub: `Marukiee/Keeper`.
 
 ## Harde regels
 

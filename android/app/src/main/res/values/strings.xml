@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Daglicht</string>
+    <string name="app_name">Keeper</string>
     <string name="channel_update">Updates</string>
-    <string name="channel_update_desc">Meldingen over nieuwe versies van Daglicht</string>
+    <string name="channel_update_desc">Meldingen over nieuwe versies van Keeper</string>
 
     <string name="nav_gallery">Galerij</string>
     <string name="nav_edit">Bewerken</string>
@@ -32,8 +32,8 @@
     <string name="today_empty_title">Geen nieuwe foto\'s</string>
     <string name="today_empty_body">Er is niets nieuws sinds %1$s.</string>
 
-    <string name="permission_title">Daglicht mag je foto\'s niet zien</string>
-    <string name="permission_body">Alleen lezen: Daglicht kijkt welke foto\'s nieuw zijn en wat ermee moet. Er wordt niets gewijzigd of verwijderd.</string>
+    <string name="permission_title">Keeper mag je foto\'s niet zien</string>
+    <string name="permission_body">Alleen lezen: Keeper kijkt welke foto\'s nieuw zijn en wat ermee moet. Er wordt niets gewijzigd of verwijderd.</string>
     <string name="permission_action">Toegang geven</string>
 
     <string name="review_lightroom">Lightroom</string>

@@ -21,11 +21,11 @@ val appVersionName = (findProperty("versionName") as String?) ?: "0.1.0"
 val appVersionCode = ((findProperty("versionCode") as String?) ?: "1").toInt()
 
 android {
-    namespace = "nl.markmaaktmedia.daglicht"
+    namespace = "nl.markmaaktmedia.keeper"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "nl.markmaaktmedia.daglicht"
+        applicationId = "nl.markmaaktmedia.keeper"
         minSdk = 31
         targetSdk = 36
         versionCode = appVersionCode
@@ -35,7 +35,7 @@ android {
         ndk { abiFilters += "arm64-v8a" }
 
         buildConfigField("String", "GITHUB_OWNER", "\"Marukiee\"")
-        buildConfigField("String", "GITHUB_REPO", "\"Daglicht\"")
+        buildConfigField("String", "GITHUB_REPO", "\"Keeper\"")
     }
 
     signingConfigs {
