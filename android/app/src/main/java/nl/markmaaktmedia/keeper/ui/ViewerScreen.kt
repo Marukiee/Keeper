@@ -180,7 +180,6 @@ fun ViewerScreen(
         val start = list[pager.currentPage.coerceIn(0, list.lastIndex)]
         val bitmap = scanner.cachedLarge(start.item, PREVIEW_EDGE) ?: scanner.cached(start.item, 360)
         val tile = bounds.rects[start.item.id]
-        android.util.Log.w("HERO", "open bitmap=${bitmap?.width}x${bitmap?.height} tile=$tile pager=$pagerRect keys=${bounds.rects.size}")
         if (bitmap != null && tile != null) {
             // De foto groeit vanuit zijn eigen tegel naar zijn plaats; de tegel blijft vanaf nu leeg.
             val fit = minOf(pagerRect.width / bitmap.width, pagerRect.height / bitmap.height)
