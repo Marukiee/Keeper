@@ -46,7 +46,8 @@ fun ConvertDialog(state: ConvertState, outputFolder: String, onPause: () -> Unit
             KeeperDialog(
                 title = stringResource(R.string.convert_title_running),
                 onDismiss = { hidden = true },
-                icon = KeeperIcons.Image,
+                // Zodra het voorbeeld van de foto er staat, is het icoon overbodig; alleen bij het voorbereiden staat het er nog.
+                icon = if (state.total > 0 && state.item != null) null else KeeperIcons.Image,
                 body = if (state.total > 0) null else stringResource(R.string.convert_preparing),
                 dismissOnOutsideTap = false,
                 closeLabel = stringResource(R.string.settings_back),
