@@ -36,7 +36,9 @@ zonder hartje naar de prullenbak; RAW's, exports, bewerkingen en hun originelen 
 
 ## Harde regels
 
-- Nooit iets automatisch verwijderen, ook niet op de telefoon.
+- Nooit iets automatisch verwijderen, ook niet op de telefoon. Enige uitzondering (Mark, 2026-11-16): niet-bewaarde RAW's na een
+  instelbare termijn. Daar komt eerst een notificatie van; er gaat pas iets naar de prullenbak nadat Mark in de app de lijst heeft
+  bekeken en bevestigd heeft (plus Android's eigen bevestiging). Nog niet gebouwd.
 - Geen accessibility service (Triodos ziet de telefoon dan als geroot).
 - Op de telefoon installeren alleen met Mark's OK.
 - Alleen zwaar werk tijdens het opladen, tenzij Mark de knop toch indrukt (WorkManager plus voortgangsnotificatie).
