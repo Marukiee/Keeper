@@ -9,6 +9,9 @@ in een map die Immich zelf back-upt.
 Fase 0 (prototype HDR naar SDR op de Mac) is klaar en wacht op Mark's oordeel. Fase 1 tot 3 pas na zijn OK.
 Zie `fase0/RAPPORT.md`.
 
+Besluit van Mark (2026-11-16): tone map **normaal** (belichting 0,90, knie 0,45, mix 0,5, piek uit de inhoud gemeten) is de standaard.
+Nog open: JPEG-kwaliteit (q90, q93 of q95), meer echte testscènes, en zijn OK voor fase 1.
+
 ## Conventies (zelfde als Tandem en PixelPlayer)
 
 - Nederlandse UI. Nooit em-dashes. Korte commentaren die uitleggen waarom, niet wat.
