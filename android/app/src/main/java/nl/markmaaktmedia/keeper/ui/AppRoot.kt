@@ -11,6 +11,7 @@ import nl.markmaaktmedia.keeper.scan.MediaScanner
 import nl.markmaaktmedia.keeper.scan.Photo
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -117,7 +118,7 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
                         state, GalleryFilter.entries[filter], { filter = it.ordinal }, permitted, { ask.launch(Manifest.permission.READ_MEDIA_IMAGES) },
                         { photos -> vm.select(photos, true) },
                         { photos -> vm.reject(photos) },
-                        { photo, shown -> viewer = ViewerRequest(shown.map { it.item.id }, photo.item.id); viewerCurrent = photo.item.id; sub = Sub.Viewer },
+                        { photo, shown -> viewer = ViewerRequest(shown.map { it.item.id }, photo.item.id); viewerCurrent = null; sub = Sub.Viewer },
                         { sub = Sub.Overview },
                         trash,
                         bounds = tileBounds,
@@ -139,7 +140,8 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
         // Boven alles, ook boven de navigatiebalk. De achtergrond van de viewer wordt doorzichtig bij het slepen.
         AnimatedVisibility(
             visible = sub == Sub.Viewer,
-            enter = slideInVertically { it / 12 } + fadeIn(),
+            // De viewer laat zichzelf binnenkomen: de foto groeit uit zijn tegel.
+            enter = EnterTransition.None,
             exit = fadeOut(tween(220)),
         ) {
             viewer?.let { request ->

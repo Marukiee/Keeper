@@ -13,6 +13,10 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.first
+import nl.markmaaktmedia.keeper.ui.components.bouncyClickable
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.lerp
 import androidx.compose.ui.layout.boundsInRoot
@@ -162,12 +166,45 @@ fun ViewerScreen(
     var origin by remember { mutableStateOf(Offset.Zero) }
     var hero by remember { mutableStateOf<Hero?>(null) }
     var heroT by remember { mutableFloatStateOf(0f) }
+    // Openen: de foto groeit uit zijn tegel; tot dat klaar is staat de pager uit en komt de achtergrond (openT) geleidelijk binnen.
+    var opening by remember { mutableStateOf(true) }
+    var openT by remember { mutableFloatStateOf(0f) }
     LaunchedEffect(pager.currentPage) { zoomed = false }
     val current = list[pager.currentPage.coerceIn(0, list.lastIndex)]
-    LaunchedEffect(current.item.id) { onCurrent(current.item.id) }
+    val currentId by rememberUpdatedState(current.item.id)
+    // Tijdens het openen meldt het openen zelf de foto, op het moment dat de tegel leeg moet.
+    LaunchedEffect(current.item.id) { if (!opening) onCurrent(current.item.id) }
     val scanner = context.graph.scanner
+    LaunchedEffect(Unit) {
+        snapshotFlow { pagerRect }.first { it.width > 0f && it.height > 0f }
+        val start = list[pager.currentPage.coerceIn(0, list.lastIndex)]
+        val bitmap = scanner.cachedLarge(start.item, PREVIEW_EDGE) ?: scanner.cached(start.item, 360)
+        val tile = bounds.rects[start.item.id]
+        android.util.Log.w("HERO", "open bitmap=${bitmap?.width}x${bitmap?.height} tile=$tile pager=$pagerRect keys=${bounds.rects.size}")
+        if (bitmap != null && tile != null) {
+            // De foto groeit vanuit zijn eigen tegel naar zijn plaats; de tegel blijft vanaf nu leeg.
+            val fit = minOf(pagerRect.width / bitmap.width, pagerRect.height / bitmap.height)
+            val w = bitmap.width * fit
+            val h = bitmap.height * fit
+            val centre = pagerRect.center
+            heroT = 0f
+            hero = Hero(bitmap, tile, Rect(centre.x - w / 2f, centre.y - h / 2f, centre.x + w / 2f, centre.y + h / 2f))
+            onCurrent(start.item.id)
+            coroutineScope {
+                launch { animate(0f, 1f, animationSpec = tween(HERO_MS)) { value, _ -> openT = value } }
+                animate(0f, 1f, animationSpec = tween(HERO_MS, easing = FastOutSlowInEasing)) { value, _ -> heroT = value }
+            }
+            hero = null
+        } else {
+            // Geen tegel in beeld: gewoon invloeien.
+            opening = false
+            animate(0f, 1f, animationSpec = tween(180)) { value, _ -> openT = value }
+        }
+        opening = false
+        onCurrent(currentId)
+    }
     fun closeNow(velocity: Velocity) {
-        if (closing) return
+        if (closing || opening) return
         closing = true
         val bitmap = scanner.cachedLarge(current.item, PREVIEW_EDGE) ?: scanner.cached(current.item, 360)
         val tile = bounds.rects[current.item.id]
@@ -178,6 +215,7 @@ fun ViewerScreen(
             val centre = pagerRect.center + drag
             val w = bitmap.width * fit * scale
             val h = bitmap.height * fit * scale
+            heroT = 0f
             hero = Hero(bitmap, Rect(centre.x - w / 2f, centre.y - h / 2f, centre.x + w / 2f, centre.y + h / 2f), tile)
             settleJob[0] = scope.launch {
                 launch { animate(closeFade, 1f, animationSpec = tween(HERO_MS)) { value, _ -> closeFade = value } }
@@ -199,13 +237,14 @@ fun ViewerScreen(
     // Terug (knop of gebaar) sluit op dezelfde manier. Altijd actief, zodat het scherm niet midden in de vlucht wegvalt.
     BackHandler { closeLatest(Velocity.Zero) }
     // Knoppen en kop zijn al weg na een vijfde van het sleepbereik, zodat ze niet over de galerij eronder hangen.
-    val barsFade: androidx.compose.ui.graphics.GraphicsLayerScope.() -> Unit = { alpha = 1f - (progress() * BARS_FADE).coerceAtMost(1f) }
+    // Bij het openen komen ze pas binnen als de foto bijna op zijn plek is.
+    val barsFade: androidx.compose.ui.graphics.GraphicsLayerScope.() -> Unit = { alpha = ((openT - 0.5f) * 2f).coerceIn(0f, 1f) * (1f - (progress() * BARS_FADE).coerceAtMost(1f)) }
 
     Box(
         Modifier.fillMaxSize()
             .onGloballyPositioned { origin = it.positionInRoot() }
             // De achtergrond wordt doorzichtig naarmate je de foto wegsleept: de galerij eronder komt langzaam terug.
-            .drawBehind { drawRect(backdrop, alpha = 1f - (progress() * BACKDROP_FADE).coerceAtMost(1f)) }
+            .drawBehind { drawRect(backdrop, alpha = openT * (1f - (progress() * BACKDROP_FADE).coerceAtMost(1f))) }
             // De viewer ligt over de galerij: aanrakingen mogen er niet doorheen vallen.
             .pointerInput(Unit) {},
     ) {
@@ -220,6 +259,15 @@ fun ViewerScreen(
                 )
             }
             if (current.item.isFavorite) Icon(KeeperIcons.Favorite, stringResource(R.string.filter_favorites), tint = Color(0xFFFF8FA3), modifier = Modifier.padding(end = 14.dp).size(20.dp))
+            // Lightroom staat in de kop: een knop onderin liet de rij met bewaren en prullenbak bij elke RAW omhoog springen.
+            if (current.item.isDng) Row(
+                Modifier.padding(end = 8.dp).clip(PillShape).background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                    .bouncyClickable { openInLightroom(scope, context, current, photos, defaultLook) }.padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Icon(KeeperIcons.OpenInNew, null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(18.dp))
+                Text(stringResource(R.string.review_lightroom), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, softWrap = false)
+            }
         }
         // De vaste omlijsting vangt het gebaar op (in de Initial-ronde, vóór de pager); de pager erbinnen krijgt de verplaatsing.
         // Zo staan de aanraakcoördinaten niet mee te schuiven met de foto.
@@ -230,7 +278,7 @@ fun ViewerScreen(
                     val slop = viewConfiguration.touchSlop
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-                        if (zoomed || closing) return@awaitEachGesture
+                        if (zoomed || closing || opening) return@awaitEachGesture
                         settleJob[0]?.cancel() // een foto die nog terugveert, pak je gewoon weer vast
                         val tracker = VelocityTracker()
                         tracker.addPosition(down.uptimeMillis, down.position)
@@ -268,7 +316,7 @@ fun ViewerScreen(
                     val scale = 1f - (1f - MIN_DRAG_SCALE) * progress()
                     translationX = drag.x; translationY = drag.y; scaleX = scale; scaleY = scale
                     // Tijdens de vlucht naar de tegel tekent de laag hieronder de foto; deze staat dan even uit.
-                    alpha = if (hero != null) 0f else 1f
+                    alpha = if (hero != null || opening) 0f else 1f
                 },
                 userScrollEnabled = !zoomed,
                 key = { list.getOrNull(it)?.item?.id ?: it },
@@ -304,7 +352,6 @@ fun ViewerScreen(
                     size = 48, iconSize = 22, background = MaterialTheme.colorScheme.errorContainer, tint = MaterialTheme.colorScheme.onErrorContainer,
                 )
             }
-            if (current.item.isDng) SecondaryPillButton(stringResource(R.string.review_lightroom), { openInLightroom(scope, context, current, photos, defaultLook) }, Modifier.fillMaxWidth(), icon = KeeperIcons.OpenInNew)
         }
     }
     hero?.let { h ->
