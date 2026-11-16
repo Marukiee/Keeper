@@ -11,6 +11,16 @@ galerij als startscherm met bewaren (tik op het rondje, ingedrukt houden en slep
 Lightroom-knop op RAW, naar de prullenbak (alleen met Android's bevestiging), Opruimen per dag, overzicht, Bewerken en Instellingen
 (kwaliteit en tone map). Het omzetten zelf (fase 2) en de Immich-omschakeling plus release-workflow (fase 3) wachten op Mark's OK.
 
+Fase 2 (omzetten) is bezig op branch `claude/fase-2-omzetten`. Klaar en getest: tone map, Ultra HDR-lezer met gain-map-sampler, eigen
+JPEG-encoder (baseline, Annex K-tabellen, kwaliteit zoals libjpeg), en `Converter` (gain map toepassen, tone map, coderen in stroken, parallel).
+Gemeten op de emulator: 50 MP-foto in ongeveer 4 s, uitvoer 8,1 MB bij libjpeg-q92, gelijk in grootte en 0,7 ssimulacra2 onder jpegli q94 (kwaliteit q94 in de
+UI wordt dus libjpeg-q92 in de encoder, q90 tot q95 wordt q88 tot q93). Nog te doen: metadata schrijven (EXIF-whitelist, ICC, hdrgm en trailer eruit) met exiftool-diff,
+DNG-preview als camera-versie, naar MediaStore schrijven (`Pictures/Keeper`, `IS_PENDING`), WorkManager met melding, Convert-knop en Overzicht aansluiten.
+Debug-hulp: `ConvertDebugReceiver` (alleen debug-build, via `adb shell am broadcast`) zet een foto uit `files/` om; `prototype/vergelijk.py` meet de afwijking met het prototype.
+
+Warm flash (`warmflash/`): het filter is te benaderen met een 3D-LUT plus radiaal vignet, gefit op 19 foto-paren (bron uit de trailer, eindbeeld): gemiddeld dE76 2,7 op
+foto's die niet in de training zaten (zonder correctie 17,3). Scripts in `prototype/warmflash_*.py`. Nog open: met RAW's toetsen (Lightroom-export tegen de camera-versie in de DNG).
+
 Besluiten van Mark (2026-11-16): tone map **normaal** (belichting 0,90, knie 0,45, mix 0,5, piek uit de inhoud gemeten) is de
 standaard; JPEG-kwaliteit jpegli **q94** (instelbaar q90 tot q95); OK voor fase 1.
 

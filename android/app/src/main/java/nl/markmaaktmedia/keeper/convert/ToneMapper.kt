@@ -22,6 +22,21 @@ class ToneMapper(
     private val invKnee = 1f / (1f - knee)
     private val w2: Float = max((peak * exposure - knee) * invKnee, 1e-3f).let { it * it }
 
+    // Tabel van de curve tussen 0 en de piek (daarboven is de uitkomst 1,0). De curve is overal glad (ook bij de knie), dus
+    // lineair interpoleren tussen 4096 punten geeft een fout van orde 1e-7 en bespaart twee delingen per aanroep.
+    private val top = max(peak, knee / exposure + 1e-3f)
+    private val lutScale = LUT_SIZE / top
+    private val lut = FloatArray(LUT_SIZE + 2) { curve(it / lutScale) }
+
+    private fun fast(v: Float): Float {
+        if (v >= top) return 1f
+        if (v <= 0f) return 0f
+        val f = v * lutScale
+        val i = f.toInt()
+        val a = lut[i]
+        return a + (lut[i + 1] - a) * (f - i)
+    }
+
     /** Lineair tot de knie, daarboven een zachte rolloff die de piek precies op wit brengt. */
     fun curve(v: Float): Float {
         val vs = v * exposure
@@ -34,7 +49,7 @@ class ToneMapper(
     /** Schrijft lineaire SDR in [0,1] naar `out[o..o+2]`, zelfde gamut als de invoer. */
     fun map(r: Float, g: Float, b: Float, out: FloatArray, o: Int) {
         val y = luma[0] * r + luma[1] * g + luma[2] * b
-        val yo = curve(y)
+        val yo = fast(y)
         val scale = if (y > 1e-6f) yo / y else exposure
         var or = r * scale
         var og = g * scale
@@ -47,9 +62,9 @@ class ToneMapper(
             ob = yo + (ob - yo) * t
         }
         if (mix < 1f) {
-            or = mix * or + (1f - mix) * curve(r)
-            og = mix * og + (1f - mix) * curve(g)
-            ob = mix * ob + (1f - mix) * curve(b)
+            or = mix * or + (1f - mix) * fast(r)
+            og = mix * og + (1f - mix) * fast(g)
+            ob = mix * ob + (1f - mix) * fast(b)
         }
         out[o] = or.coerceIn(0f, 1f)
         out[o + 1] = og.coerceIn(0f, 1f)
@@ -57,6 +72,8 @@ class ToneMapper(
     }
 
     companion object {
+        private const val LUT_SIZE = 4096
+
         /** Luminantiecoefficienten voor lineair Display P3 en voor sRGB (Rec. 709). */
         val LUMA_P3 = floatArrayOf(0.2289746f, 0.6917385f, 0.0792869f)
         val LUMA_SRGB = floatArrayOf(0.2126f, 0.7152f, 0.0722f)

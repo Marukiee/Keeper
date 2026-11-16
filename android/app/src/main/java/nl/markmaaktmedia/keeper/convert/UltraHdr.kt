@@ -111,11 +111,16 @@ class GainMapSampler(private val meta: GainMapMeta?, private val gm: GainMapImag
         }
     }
 
+    /** Werkgeheugen voor [hdrRow]; één per thread. */
+    fun newScratch(): FloatArray = FloatArray((gm?.width ?: 0) * (gm?.channels ?: 0))
+
+    fun hdrRow(y: Int, sdr: FloatArray, out: FloatArray) = hdrRow(y, sdr, out, newScratch())
+
     /**
      * [sdr] en [out] zijn rijen van `width * 3` lineaire floats. Zonder gain map is de uitvoer gelijk aan de invoer.
-     * [out] mag dezelfde array zijn als [sdr].
+     * [out] mag dezelfde array zijn als [sdr]. [scratch] komt uit [newScratch] en mag niet door twee threads tegelijk gebruikt worden.
      */
-    fun hdrRow(y: Int, sdr: FloatArray, out: FloatArray) {
+    fun hdrRow(y: Int, sdr: FloatArray, out: FloatArray, scratch: FloatArray) {
         val m = meta
         val g = gm
         val tables = lut
@@ -128,16 +133,20 @@ class GainMapSampler(private val meta: GainMapMeta?, private val gm: GainMapImag
         val rowLo = yl * g.width * ch
         val rowHi = yh * g.width * ch
         val data = g.data
+        // Eerst verticaal mengen: de gain map is veel kleiner dan het beeld, dus dit gebeurt maar één keer per rij en niet per pixel.
+        val n = g.width * ch
+        val wy1 = 1f - wy
+        for (i in 0 until n) scratch[i] = (data[rowLo + i].toInt() and 0xFF) * wy1 + (data[rowHi + i].toInt() and 0xFF) * wy
+        val toIndex = LUT_SIZE / 255f
         for (x in 0 until width) {
             val wx = xWeight[x]
+            val wx1 = 1f - wx
             val a = xLow[x] * ch
             val b = xHigh[x] * ch
             for (c in 0 until 3) {
                 val k = if (ch == 1) 0 else c
-                val top = (data[rowLo + a + k].toInt() and 0xFF) * (1 - wx) + (data[rowLo + b + k].toInt() and 0xFF) * wx
-                val bottom = (data[rowHi + a + k].toInt() and 0xFF) * (1 - wx) + (data[rowHi + b + k].toInt() and 0xFF) * wx
-                val gv = (top * (1 - wy) + bottom * wy) * (1f / 255f)
-                val factor = tables[c][(gv * LUT_SIZE + 0.5f).toInt().coerceIn(0, LUT_SIZE)]
+                val gv = scratch[a + k] * wx1 + scratch[b + k] * wx
+                val factor = tables[c][(gv * toIndex + 0.5f).toInt().coerceIn(0, LUT_SIZE)]
                 val i = x * 3 + c
                 val hdr = (sdr[i] + m.offSdr[c]) * factor - m.offHdr[c]
                 out[i] = if (hdr > 0f) hdr else 0f

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- Alleen in debug-builds: een foto uit de eigen map omzetten via adb, zonder de app te bedienen. -->
+        <receiver android:name="nl.markmaaktmedia.keeper.debug.ConvertDebugReceiver" android:exported="true">
+            <intent-filter>
+                <action android:name="nl.markmaaktmedia.keeper.CONVERT" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>
