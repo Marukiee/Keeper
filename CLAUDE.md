@@ -36,6 +36,11 @@ dE76 3 tot 5 tegen ongeveer 21 zonder look, op de telefoon bevestigd. Het raden 
 **Fresh en Vintage nog niet gemaakt**: 10 DNG-paren verzameld maar er is geen bewijs welk DNG welke preset had (DNG's noemen het niet; alleen JPG 132736=Vintage en 132906/132909=Fresh); een DNG (132752) past beter op
 de andere groep, en de tabellen verschillen ongeveer evenveel als de ruis. Nodig: per preset ~8 DNG's achter elkaar met eerst een JPG in dezelfde preset. Op de telefoon gemeten: Lightroom past de Look ook toe bij een `content://`-adres (MediaStore) en geeft hetzelfde beeld als bij `file://`. Nog niet getest: de knop zelf met Keeper's FileProvider (debug-app moet op de telefoon, wacht op Mark's OK).
 
+Warm flash als eigen Lightroom-preset (2026-11-16, op Mark's telefoon gemaakt): een los `.xmp`-voorinstelling importeren (Presets, drie puntjes, Import Presets) meldt "1 preset imported" maar er verschijnt niets in de lijst, dus die route werkt niet.
+Wel: open een DNG met de Look erin (zoals Keeper die maakt, of `prototype/dng_xmp.py` plus `assets/looks/<id>.xml`) in Lightroom, ga naar Presets, drie puntjes, Create Preset. Lightroom noemt de look dan "Profile: Warm flash";
+vink alleen Profile en Effects (het vignet) aan, Light, Color, Detail en Optics uit (anders zet de preset de belichting van die ene foto vast) en geef hem een naam. De preset staat dan in User Presets, heeft een Amount-schuif en
+werkt op elke foto, ook zonder het camerafilter. Voor Fresh en Vintage dezelfde route zodra die looks er zijn.
+
 Besluiten van Mark (2026-11-16): tone map **normaal** (belichting 0,90, knie 0,45, mix 0,5, piek uit de inhoud gemeten) is de
 standaard; JPEG-kwaliteit jpegli **q94** (instelbaar q90 tot q95); OK voor fase 1.
 
