@@ -28,6 +28,14 @@ tussenbestand van 2 tot 4 MB met de naam `.dng` dat in werkelijkheid een JPEG is
 (of scant) ziet dus ten onrechte een preset in een "DNG". Daarom: bestandstype altijd aan de kop herkennen (`FF D8` is JPEG, `II*\0` is TIFF/DNG), nooit aan de naam.
 De preset voor een DNG moet uit de omgeving (JPG vlak ernaast) of van de gebruiker komen. `prototype/adobe_look.py` schrijft en leest Adobe-profielen (Look) met een 3D-LUT (RGBTable), getest tegen echte Lightroom-bestanden.
 
+Lightroom-preset op RAW's (2026-11-16): Lightroom mobile kent de camerapresets niet, dus Keeper zet de look zelf in de DNG. De knop "Lightroom" (Bewerken en Bekijken) kopieert de DNG naar
+`cache/looks/` (hooguit 3 kopieën), voegt via `lightroom/DngXmp` een `crs:Look` met 32³-tabel plus vignet toe aan de XMP (alleen bytes achteraan, het origineel blijft ongemoeid) en opent die kopie via FileProvider
+in Lightroom. Preset per foto: kiesvakje in Bewerken; standaard de preset uit de camera-JPG die ≤3 minuten ernaast is genomen (`LookLauncher.guess`, leest de Oppo-trailer), anders de standaard uit Instellingen.
+Alleen presets met een bestand in `assets/looks/` komen in de keuze. Gemeten: Warm flash 4 JPG's met trailer als bewijs, gefit op de DNG-preview (die heeft het filter wél) tegen Lightroom's standaardweergave:
+dE76 3 tot 5 tegen ongeveer 21 zonder look, op de telefoon bevestigd. Scripts `prototype/lr_*.py` (collect, fit, vignet, eval) en `prototype/maak_looks.py` (npz in `looks/` naar asset-XML).
+**Fresh en Vintage nog niet gemaakt**: 10 DNG-paren verzameld maar er is geen bewijs welk DNG welke preset had (DNG's noemen het niet; alleen JPG 132736=Vintage en 132906/132909=Fresh); een DNG (132752) past beter op
+de andere groep, en de tabellen verschillen ongeveer evenveel als de ruis. Nodig: per preset ~8 DNG's achter elkaar met eerst een JPG in dezelfde preset. Nog niet getest op de telefoon: de knop zelf (FileProvider/content-URI in Lightroom; alleen `file://` via adb is gemeten).
+
 Besluiten van Mark (2026-11-16): tone map **normaal** (belichting 0,90, knie 0,45, mix 0,5, piek uit de inhoud gemeten) is de
 standaard; JPEG-kwaliteit jpegli **q94** (instelbaar q90 tot q95); OK voor fase 1.
 

@@ -15,7 +15,9 @@ import nl.markmaaktmedia.keeper.ui.components.ContentRow
 import nl.markmaaktmedia.keeper.ui.components.SegmentedPillRow
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import nl.markmaaktmedia.keeper.lightroom.LookPreset
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -43,6 +45,7 @@ fun SettingsScreen(onOpenUpdates: () -> Unit, contentPadding: PaddingValues) {
     val quality by prefs.quality.collectAsState(initial = 94)
     val toneMapId by prefs.toneMap.collectAsState(initial = "normaal")
     val toneMap = ToneMap.of(toneMapId)
+    val lookDefault by prefs.lookDefault.collectAsState(initial = "")
 
     LazyColumn(Modifier.fillMaxWidth(), contentPadding = contentPadding, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         item { ScreenHeader(stringResource(R.string.settings_title)) }
@@ -78,6 +81,21 @@ fun SettingsScreen(onOpenUpdates: () -> Unit, contentPadding: PaddingValues) {
                             ToneMap.Normaal -> R.string.tonemap_normaal_body
                             ToneMap.LichtenBehouden -> R.string.tonemap_lichten_body
                         }),
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+        item {
+            SectionHeader(stringResource(R.string.settings_raw))
+            SettingsGroup {
+                ContentRow(0, 1, KeeperIcons.OpenInNew, stringResource(R.string.settings_raw_look)) {
+                    val presets = remember { LookPreset.available(context) }
+                    val ids = listOf("") + presets.map { it.id }
+                    val noneLabel = stringResource(R.string.look_none)
+                    SegmentedPillRow(ids, lookDefault, { id -> LookPreset.of(id)?.label ?: noneLabel }, { scope.launch { prefs.setLookDefault(it) } }, equalWidth = true)
+                    Text(
+                        stringResource(R.string.settings_raw_look_sub),
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }

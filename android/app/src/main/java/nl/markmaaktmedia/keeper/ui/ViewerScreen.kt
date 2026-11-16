@@ -27,6 +27,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.rememberCoroutineScope
+import nl.markmaaktmedia.keeper.graph
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -91,6 +94,8 @@ fun ViewerScreen(
         return
     }
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val defaultLook by context.graph.prefs.lookDefault.collectAsState(initial = "")
     val pager = rememberPagerState(initialPage = list.indexOfFirst { it.item.id == startId }.coerceAtLeast(0)) { list.size }
     var zoomed by remember { mutableStateOf(false) }
     LaunchedEffect(pager.currentPage) { zoomed = false }
@@ -131,7 +136,7 @@ fun ViewerScreen(
                     if (current.selected) PrimaryPillButton(stringResource(R.string.viewer_kept), { onSelect(current, false) }, Modifier.weight(1f), icon = KeeperIcons.Check)
                     else SecondaryPillButton(stringResource(R.string.viewer_keep), { onSelect(current, true) }, Modifier.weight(1f), icon = KeeperIcons.Check)
                 } else Box(Modifier.weight(1f))
-                if (current.item.isDng) SecondaryPillButton(stringResource(R.string.review_lightroom), { openInLightroom(context, current) }, icon = KeeperIcons.OpenInNew)
+                if (current.item.isDng) SecondaryPillButton(stringResource(R.string.review_lightroom), { openInLightroom(scope, context, current, photos, defaultLook) }, icon = KeeperIcons.OpenInNew)
                 // Naar de prullenbak, na Android's eigen bevestiging; terug te zetten.
                 KeeperIconButton(
                     KeeperIcons.Delete, stringResource(R.string.review_trash), { onTrash(current) },

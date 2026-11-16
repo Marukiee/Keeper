@@ -30,6 +30,7 @@ class KeeperPrefs(private val context: Context) {
         val includeCshot = booleanPreferencesKey("include_cshot")
         val quality = intPreferencesKey("jpeg_quality")
         val toneMap = stringPreferencesKey("tone_map")
+        val lookDefault = stringPreferencesKey("look_default")
     }
 
     val autoUpdateCheck: Flow<Boolean> = data.map { it[K.autoUpdate] ?: true }
@@ -81,6 +82,10 @@ class KeeperPrefs(private val context: Context) {
     /** Naam van de tone map (zie [nl.markmaaktmedia.keeper.scan.ToneMap]). */
     val toneMap: Flow<String> = data.map { it[K.toneMap] ?: "normaal" }
     suspend fun setToneMap(name: String) = edit { it[K.toneMap] = name }
+
+    /** Preset die Lightroom over een RAW krijgt als de camera-JPG ernaast niet zegt welke het was ("" is geen). Zie `LookPreset`. */
+    val lookDefault: Flow<String> = data.map { it[K.lookDefault] ?: "" }
+    suspend fun setLookDefault(id: String) = edit { it[K.lookDefault] = id }
 
     private suspend fun edit(block: (androidx.datastore.preferences.core.MutablePreferences) -> Unit) {
         context.store.edit { block(it) }

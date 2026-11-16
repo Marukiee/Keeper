@@ -128,4 +128,9 @@
     <string name="tonemap_licht_body">The brightest. The sky can turn almost white.</string>
     <string name="tonemap_normaal_body">Balanced: brightened with soft highlights.</string>
     <string name="tonemap_lichten_body">Keeps highlights: clouds and bright areas keep more detail, the picture stays a little darker.</string>
+    <string name="settings_raw">RAW photos</string>
+    <string name="settings_raw_look">Lightroom preset</string>
+    <string name="settings_raw_look_sub">Used when a RAW has no camera JPG next to it that shows which preset it had. Lightroom has no camera presets, so Keeper puts the look in the file it opens.</string>
+    <string name="look_none">None</string>
+    <string name="edit_preset">Preset: %1$s</string>
 </resources>

@@ -126,4 +126,9 @@
     <string name="tonemap_licht_body">Het helderst. De lucht kan bijna wit worden.</string>
     <string name="tonemap_normaal_body">Evenwichtig: opgehelderd met zachte lichten.</string>
     <string name="tonemap_lichten_body">Lichten behouden: wolken en lichten houden meer tekening, het beeld blijft wat donkerder.</string>
+    <string name="settings_raw">RAW-foto\'s</string>
+    <string name="settings_raw_look">Lightroom-preset</string>
+    <string name="settings_raw_look_sub">Geldt als er geen camera-JPG naast de RAW staat die laat zien welke preset hij had. Lightroom kent de camerapresets niet, dus Keeper zet de look in het bestand dat hij opent.</string>
+    <string name="look_none">Geen</string>
+    <string name="edit_preset">Preset: %1$s</string>
 </resources>
