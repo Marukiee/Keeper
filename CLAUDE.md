@@ -6,11 +6,17 @@ in een map die Immich zelf back-upt.
 
 ## Stand
 
-Fase 0 (prototype HDR naar SDR op de Mac) is klaar en wacht op Mark's oordeel. Fase 1 tot 3 pas na zijn OK.
-Zie `fase0/RAPPORT.md`.
+Fase 0 (prototype) is klaar en goedgekeurd. Fase 1 (overzicht, alleen lezen) is gebouwd en staat op branch `claude/fase-1-overzicht`:
+galerij als startscherm met bewaren (tik op het rondje, ingedrukt houden en slepen), favorieten, groot bekijken met zoomen,
+Lightroom-knop op RAW, naar de prullenbak (alleen met Android's bevestiging), Opruimen per dag, overzicht, Bewerken en Instellingen
+(kwaliteit en tone map). Het omzetten zelf (fase 2) en de Immich-omschakeling plus release-workflow (fase 3) wachten op Mark's OK.
 
-Besluit van Mark (2026-11-16): tone map **normaal** (belichting 0,90, knie 0,45, mix 0,5, piek uit de inhoud gemeten) is de standaard.
-Nog open: JPEG-kwaliteit (q90, q93 of q95), meer echte testscènes, en zijn OK voor fase 1.
+Besluiten van Mark (2026-11-16): tone map **normaal** (belichting 0,90, knie 0,45, mix 0,5, piek uit de inhoud gemeten) is de
+standaard; JPEG-kwaliteit jpegli **q94** (instelbaar q90 tot q95); OK voor fase 1.
+
+Model van de galerij: bewaard (vinkje) is wat meegaat naar de uitvoermap en blijft staan. Camera-JPG's en RAW's staan standaard
+**uit**, Lightroom-exports en Galerij-bewerkingen standaard **aan**. Opruimen (per dag) stuurt alleen niet-bewaarde camera-JPG's
+zonder hartje naar de prullenbak; RAW's, exports, bewerkingen en hun originelen blijven altijd staan.
 
 ## Conventies (zelfde als Tandem en PixelPlayer)
 
