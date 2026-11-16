@@ -29,11 +29,6 @@ def build(pid):
     xml = A.dng_look_description(name, table_from(z["lut"], 32), uuid, extra_settings=extra)
     out = os.path.join(ROOT, "android", "app", "src", "main", "assets", "looks", f"{pid}.xml")
     open(out, "w", encoding="utf-8").write(xml)
-    # Dezelfde look als los Lightroom-voorinstelling om te importeren (Presets > Importeer), voor foto's zonder dit filter.
-    preset_uuid = hashlib.md5(f"keeper-preset-{pid}".encode()).hexdigest().upper()
-    preset = A.preset_xmp(name, table_from(z["lut"], 32), uuid, preset_uuid, extra_settings=extra)
-    os.makedirs(os.path.join(ROOT, "lightroom-presets"), exist_ok=True)
-    open(os.path.join(ROOT, "lightroom-presets", f"{name}.xmp"), "w", encoding="utf-8").write(preset)
     return out, os.path.getsize(out)
 
 
