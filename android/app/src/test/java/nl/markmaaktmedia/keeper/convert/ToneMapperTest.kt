@@ -111,4 +111,71 @@ class ToneMapperTest {
         m.map(0.2f, 0.2f, 0.2f, out, 0)
         assertEquals(0.2f * ToneMapper.MIN_EXPOSURE, out[0], 1e-4f)
     }
+
+    // ---- Anker: lichte pixels zonder opticht blijven zoals de camera-SDR (waarden uit prototype/tonemap.py, tonemap_anchored met peak 2, Normaal) ----
+
+    private fun anchored(h: FloatArray, s: FloatArray): FloatArray {
+        val out = FloatArray(3)
+        ToneMapper(2.0f, 0.90f, 0.45f).map(h[0], h[1], h[2], s[0], s[1], s[2], out, 0)
+        return out
+    }
+
+    private fun assertRgb(expected: FloatArray, actual: FloatArray) { for (c in 0..2) assertEquals("kanaal $c", expected[c], actual[c], 1e-4f) }
+
+    @Test fun `de witte rand zonder gain blijft wit`() =
+        assertRgb(floatArrayOf(1f, 1f, 1f), anchored(floatArrayOf(1f, 1f, 1f), floatArrayOf(1f, 1f, 1f)))
+
+    @Test fun `zonder anker zakt dezelfde pixel onder wit`() {
+        val out = FloatArray(3)
+        ToneMapper(2.0f, 0.90f, 0.45f).map(1f, 1f, 1f, out, 0)
+        assertEquals(0.73111105f, out[0], 1e-4f)
+    }
+
+    @Test fun `een opgetilde pixel volgt de curve`() =
+        assertRgb(floatArrayOf(1f, 1f, 1f), anchored(floatArrayOf(2f, 2f, 2f), floatArrayOf(1f, 1f, 1f)))
+
+    @Test fun `een donkere pixel zonder gain volgt de curve`() =
+        assertRgb(floatArrayOf(0.36f, 0.36f, 0.36f), anchored(floatArrayOf(0.4f, 0.4f, 0.4f), floatArrayOf(0.4f, 0.4f, 0.4f)))
+
+    @Test fun `de overgang naar het anker is geleidelijk en kleurt mee`() {
+        assertRgb(floatArrayOf(0.965624f, 0.8714f, 0.195503f), anchored(floatArrayOf(1.0f, 0.9f, 0.2f), floatArrayOf(1.0f, 0.9f, 0.2f)))
+        assertRgb(floatArrayOf(0.739044f, 0.739044f, 0.739044f), anchored(floatArrayOf(0.92f, 0.92f, 0.92f), floatArrayOf(0.8f, 0.8f, 0.8f)))
+        assertRgb(floatArrayOf(0.705267f, 0.705267f, 0.705267f), anchored(floatArrayOf(0.8f, 0.8f, 0.8f), floatArrayOf(0.77f, 0.77f, 0.77f)))
+    }
+
+    @Test fun `het anker springt nergens`() {
+        // Over een opticht van 1,0 tot 1,5 en een SDR van 0,5 tot 1,0 verandert het gewicht per stap van 0,005 hooguit zoals een gladde curve
+        // (steilste helling van de smoothstep op de opticht: 6 per eenheid, dus 0,03 per stap; op de SDR 4,3, dus 0,021).
+        for (y in 0..100) for (r in 0..100) {
+            val ys = 0.5f + y * 0.005f
+            val ratio = 1.0f + r * 0.005f
+            val a = ToneMapper.anchor(ys * ratio, ys)
+            if (r < 100) assertEquals("ys=$ys ratio=$ratio", a, ToneMapper.anchor(ys * (ratio + 0.005f), ys), 0.031f)
+            if (y < 100) assertEquals("ys=$ys ratio=$ratio", a, ToneMapper.anchor((ys + 0.005f) * ratio, ys + 0.005f), 0.03f)
+        }
+    }
+
+    @Test fun `het anker telt mee als de belichting wordt gekozen`() {
+        val luma = ToneMapper.LUMA_P3
+        // Een derde papierwit, de rest een lichte opgetilde vlak. Zonder anker ziet de bisectie de rand te donker en laat de belichting hoog;
+        // met anker is de rand gelijk aan de camera en moet de rest donkerder om op hetzelfde gemiddelde te komen.
+        val n = 600
+        val hdr = FloatArray(n * 3); val sdr = FloatArray(n * 3)
+        for (i in 0 until n) {
+            val v = if (i < 200) 1.0f else 1.1f // rand: HDR = SDR = 1.0; rest: SDR 0.55 opgetild naar 1,1 (factor 2)
+            val base = if (i < 200) 1.0f else 0.55f
+            for (c in 0..2) { hdr[i * 3 + c] = v; sdr[i * 3 + c] = base }
+        }
+        val target = (200 * 1.0 + 400 * 0.55) / 600
+        val without = ToneMapper.matching(nl.markmaaktmedia.keeper.scan.ToneMap.Normaal, 2.0f, luma, hdr, n, target)
+        val with = ToneMapper.matching(nl.markmaaktmedia.keeper.scan.ToneMap.Normaal, 2.0f, luma, hdr, n, target, sdr)
+        val a = FloatArray(3); val b = FloatArray(3)
+        without.map(0.6f, 0.6f, 0.6f, a, 0)
+        with.map(0.6f, 0.6f, 0.6f, b, 0)
+        assert(b[0] <= a[0]) { "met anker ${b[0]} zonder ${a[0]}" }
+        val out = FloatArray(3)
+        var sum = 0.0
+        for (i in 0 until n) { with.map(hdr[i * 3], hdr[i * 3 + 1], hdr[i * 3 + 2], sdr[i * 3], sdr[i * 3 + 1], sdr[i * 3 + 2], out, 0); sum += luma[0] * out[0] + luma[1] * out[1] + luma[2] * out[2] }
+        assert(sum / n <= target * 1.005) { "gemiddelde ${sum / n} doel $target" }
+    }
 }

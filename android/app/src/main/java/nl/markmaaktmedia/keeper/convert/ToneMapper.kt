@@ -71,8 +71,46 @@ class ToneMapper(
         out[o + 2] = ob.coerceIn(0f, 1f)
     }
 
+    /**
+     * Zoals [map], maar een lichte pixel die de camera niet heeft opgetild blijft zoals de camera-SDR hem gaf ([sr], [sg], [sb] zijn die
+     * SDR, lineair en in hetzelfde gamut). Papierwit zonder gain, zoals de witte rand van een Hasselblad-omlijsting, heeft in de HDR-weergave
+     * precies de helderheid van het scherm-wit; de schouder zou hem anders onder wit zetten (220 in plaats van 255) om ruimte te maken voor
+     * lichten die er in deze pixel niet zijn.
+     */
+    fun map(r: Float, g: Float, b: Float, sr: Float, sg: Float, sb: Float, out: FloatArray, o: Int) {
+        val ys = luma[0] * sr + luma[1] * sg + luma[2] * sb
+        // Eerst het goedkope pad: de meeste pixels zijn donkerder dan de ondergrens van het anker.
+        val a = if (ys <= ANCHOR_Y0) 0f else anchor(luma[0] * r + luma[1] * g + luma[2] * b, ys)
+        map(r, g, b, out, o)
+        if (a > 0f) {
+            out[o] += (sr - out[o]) * a
+            out[o + 1] += (sg - out[o + 1]) * a
+            out[o + 2] += (sb - out[o + 2]) * a
+        }
+    }
+
     companion object {
         private const val LUT_SIZE = 4096
+
+        // Anker: volledig bij een opticht van minder dan 5% (0,07 stop) in de luminantie, weg bij 30% (0,38 stop); en pas bij lichte
+        // pixels (SDR-luminantie 0,6 tot 0,95, geleidelijk), zodat donkere vlakken zonder gain gewoon de curve volgen.
+        private const val ANCHOR_R0 = 1.05f
+        private const val ANCHOR_R1 = 1.30f
+        private const val ANCHOR_Y0 = 0.60f
+        private const val ANCHOR_Y1 = 0.95f
+
+        private fun smooth(e0: Float, e1: Float, x: Float): Float {
+            val t = ((x - e0) / (e1 - e0)).coerceIn(0f, 1f)
+            return t * t * (3f - 2f * t)
+        }
+
+        /** Het gewicht in [0, 1] waarmee een pixel bij de camera-SDR blijft: [hdrLuma] en [sdrLuma] zijn lineaire luminanties. */
+        fun anchor(hdrLuma: Float, sdrLuma: Float): Float {
+            if (sdrLuma <= ANCHOR_Y0) return 0f
+            val ratio = hdrLuma / sdrLuma
+            if (ratio >= ANCHOR_R1) return 0f
+            return (1f - smooth(ANCHOR_R0, ANCHOR_R1, ratio)) * smooth(ANCHOR_Y0, ANCHOR_Y1, sdrLuma)
+        }
 
         /** Luminantiecoefficienten voor lineair Display P3 en voor sRGB (Rec. 709). */
         val LUMA_P3 = floatArrayOf(0.2289746f, 0.6917385f, 0.0792869f)
@@ -91,11 +129,12 @@ class ToneMapper(
          * midden- en schaduwtonen op) gemiddeld zo'n 30% lichter uit dan de camera-SDR, met opgetilde zwarten en bleke huid. De belichting
          * van de sterkte is het maximum: een foto die al donkerder is dan de camera-SDR wordt niet verder opgehelderd.
          *
-         * [samples] zijn lineaire HDR-pixels (r, g, b achter elkaar, [count] stuks) uit de eerste pass.
+         * [samples] zijn lineaire HDR-pixels (r, g, b achter elkaar, [count] stuks) uit de eerste pass. [sdrSamples] zijn dezelfde pixels
+         * in de SDR van de camera; met die erbij telt het anker (zie [map] met SDR) mee in het gemiddelde, zoals het in de uitvoer meetelt.
          */
         fun matching(
             t: nl.markmaaktmedia.keeper.scan.ToneMap, peak: Float, luma: FloatArray,
-            samples: FloatArray, count: Int, targetMean: Double,
+            samples: FloatArray, count: Int, targetMean: Double, sdrSamples: FloatArray? = null,
         ): ToneMapper {
             val cap = t.exposure.toFloat()
             if (count == 0 || cap <= MIN_EXPOSURE) return of(t, peak, luma)
@@ -104,7 +143,8 @@ class ToneMapper(
                 val m = ToneMapper(peak, exposure, t.knee.toFloat(), 0.5f, luma)
                 var sum = 0.0
                 for (i in 0 until count) {
-                    m.map(samples[i * 3], samples[i * 3 + 1], samples[i * 3 + 2], out, 0)
+                    if (sdrSamples != null) m.map(samples[i * 3], samples[i * 3 + 1], samples[i * 3 + 2], sdrSamples[i * 3], sdrSamples[i * 3 + 1], sdrSamples[i * 3 + 2], out, 0)
+                    else m.map(samples[i * 3], samples[i * 3 + 1], samples[i * 3 + 2], out, 0)
                     sum += luma[0] * out[0] + luma[1] * out[1] + luma[2] * out[2]
                 }
                 return sum / count

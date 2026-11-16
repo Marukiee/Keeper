@@ -61,3 +61,26 @@ def srgb_oetf_u8(lin):
     lin = np.clip(lin, 0.0, 1.0)
     v = np.where(lin <= 0.0031308, lin * 12.92, 1.055 * np.power(lin, 1 / 2.4) - 0.055)
     return (v * 255.0 + 0.5).astype(np.uint8)
+
+
+# Anker: een lichte pixel die de camera niet heeft opgetild (papierwit, de witte rand van een Hasselblad-omlijsting) blijft zoals de
+# camera-SDR hem gaf, anders zet de schouder hem onder wit (220 in plaats van 255). Zie ToneMapper.anchor in de app.
+ANCHOR_R0, ANCHOR_R1 = 1.05, 1.30  # opticht van de luminantie: volledig onder R0, weg vanaf R1
+ANCHOR_Y0, ANCHOR_Y1 = 0.60, 0.95  # alleen lichte pixels (SDR-luminantie), geleidelijk
+
+
+def _smooth(e0, e1, x):
+    t = np.clip((x - e0) / (e1 - e0), 0.0, 1.0)
+    return t * t * (3.0 - 2.0 * t)
+
+
+def anchor_weight(hdr, sdr):
+    ys = luma(sdr)
+    ratio = luma(hdr) / np.maximum(ys, 1e-6)
+    return (1.0 - _smooth(ANCHOR_R0, ANCHOR_R1, ratio)) * _smooth(ANCHOR_Y0, ANCHOR_Y1, ys)
+
+
+def tonemap_anchored(hdr, sdr, peak, k=0.95, knee=0.70, mix=1.0):
+    """Als [tonemap], met de SDR van de camera als anker voor lichte pixels zonder opticht."""
+    a = anchor_weight(hdr, sdr)[..., None]
+    return tonemap(hdr, peak, k, knee, mix) * (1.0 - a) + sdr * a

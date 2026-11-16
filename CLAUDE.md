@@ -60,6 +60,13 @@ opgetilde zwarten (p5 +7) en bleke huid, omdat de gain map midden- en schaduwton
 Hasselblad-DNG p5 39 naar 41 en p50 77 naar 78 (was 46 en 87). De sterkten verschillen nu vooral in de knie (0,60 / 0,45 / 0,40). Wat al in de
 uitvoermap staat, wordt niet opnieuw gedaan: wie oudere (te felle) uitvoer wil vervangen, verwijdert die uit `Pictures/Keeper`.
 
+Witte omlijsting (2026-11-16): bij een Hasselblad-omlijsting (Galerij-bewerking, de rand is 32% van de pixels) kwam de witte rand als 220 uit in plaats van 255.
+De gain map is daar 0, dus de HDR-waarde is precies scherm-wit (1,0), en de schouder (belichting 0,9, piek 2,4 voor lichten die in de rand niet zitten) zette dat onder wit.
+Nu houdt `ToneMapper.map(..., sr, sg, sb, ...)` een lichte pixel (SDR-luminantie 0,6 tot 0,95, geleidelijk) waarvan de HDR minder dan 5% (weg bij 30%) boven de camera-SDR
+uitkomt, bij die camera-SDR (gewicht `ToneMapper.anchor`, in `prototype/tonemap.py` als `tonemap_anchored`). Het anker telt mee in `matching` (`Measured.sdrSamples`),
+anders mat de belichting op een te donkere rand en kwam de foto zelf 23% te licht uit (nu x1,00 van de camera). Gemeten op 35 foto's: alleen de 3 omlijste foto's
+hebben ankerpixels (de rest: 0,00% in de steekproef, zelfde belichting en helderheid); rand 255, overgang naar de foto zonder halo (255, 255, 255, 254, 253, 99).
+
 Selecteren in de galerij (2026-11-16): lang indrukken start de selectiemodus en slepen selecteert een reeks zoals Google Foto's: het anker is de foto waar je begint, alles in leesvolgorde
 tussen anker en vinger gaat aan of uit (de eerste foto bepaalt welk van de twee), schuif je terug dan krimpt de reeks en krijgen de foto's buiten de reeks hun oude stand terug; autoscroll bij de boven- en onderrand.
 Het gebaar zit in `PhotoGrid` als eigen `awaitEachGesture` in de Initial-pass met sleutel `Unit`: een sleutel op de fotolijst brak het gebaar na de eerste foto af, want elke selectie levert een nieuwe lijst.
