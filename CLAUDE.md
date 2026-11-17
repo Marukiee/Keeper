@@ -108,6 +108,12 @@ bewaard, ook als Mark hem zelf had uitgezet (`skipped` min die naam), maar niets
 `OutputName.versioned` (`IMG1.jpg`, dan `IMG1-2.jpg`, `IMG1-3.jpg`); Klaar blijft op de eerste naam kijken, dus een nieuwe versie verandert niets aan de indeling. Een nieuwe versie staat in dezelfde (naar Immich gesynchroniseerde) map
 als de eerste; het verslag noemt de naam (`ConvertReport.written`). Voor vergelijken van oud en nieuw: omzetten, dan staan `naam.jpg` en `naam-2.jpg` naast elkaar met dezelfde opnametijd.
 
+HDR-sterkte (2026-11-18): één getal van 0 tot 100% (`ConvertSettings.strength`, 0 tot 1): hoeveel van de gain map meetelt. Alle gains (log2) worden met dat getal vermenigvuldigd in `GainMapSampler`
+(LUT: `2^(s * gain)`; bij ongelijke offsets telt `lift` mee, zodat 0 altijd de camera-SDR is). 100 is zoals het altijd was, 0 is de SDR van de camera. Het gaat naar beide samplers (`measure` en `convert`), anders zou de piek op de volle HDR
+gekozen worden terwijl de pixels minder HDR hebben. `ToneMapper.matching(..., strength)` laat de maximale belichting meelopen: `cap = 1 - s * (1 - preset.exposure)` (Normaal 0,90 bij 100%, 1,00 bij 0%), anders zou 0% toch 10% donkerder
+uitkomen dan de camera. Lokaal contrast verdwijnt bij lage sterkte vanzelf (geen opticht, dus gewicht 0). Standaard: `KeeperPrefs.hdrStrength` (Int, 100). Per foto: `hdrStrengthByName` (stringset `naam|procent`, de
+bestandsnaam van het origineel, zoals `skipped`; `StrengthEntries`). `ConvertJob` pakt per foto `strengthByName[naam] ?: standaard`. Een bestaande uitvoer verandert niet door een andere sterkte: daarvoor is "Nieuwe versie maken".
+
 Model van de galerij: bewaard (vinkje) is wat meegaat naar de uitvoermap en blijft staan. Camera-JPG's en RAW's staan standaard
 **uit**, Lightroom-exports en Galerij-bewerkingen standaard **aan**. Opruimen (per dag) stuurt alleen niet-bewaarde camera-JPG's
 zonder hartje naar de prullenbak; RAW's, exports, bewerkingen en hun originelen blijven altijd staan.

@@ -38,6 +38,8 @@ class KeeperPrefs(private val context: Context) {
         val includeCshot = booleanPreferencesKey("include_cshot")
         val quality = intPreferencesKey("jpeg_quality")
         val toneMap = stringPreferencesKey("tone_map")
+        val hdrStrength = intPreferencesKey("hdr_strength")
+        val hdrStrengthByName = stringSetPreferencesKey("hdr_strength_by_name")
         val lookDefault = stringPreferencesKey("look_default")
         val themeMode = stringPreferencesKey("theme_mode")
         val seed = stringPreferencesKey("seed")
@@ -128,6 +130,19 @@ class KeeperPrefs(private val context: Context) {
     val toneMap: Flow<String> = data.map { it[K.toneMap] ?: "normaal" }
     suspend fun setToneMap(name: String) = edit { it[K.toneMap] = name }
 
+    /** HDR-sterkte in procenten (0 tot 100): hoeveel van de HDR van de camera meetelt. Standaard 100, zoals het altijd was. */
+    val hdrStrength: Flow<Int> = data.map { (it[K.hdrStrength] ?: DEFAULT_STRENGTH).coerceIn(0, 100) }.distinctUntilChanged()
+    suspend fun setHdrStrength(percent: Int) = edit { it[K.hdrStrength] = percent.coerceIn(0, 100) }
+
+    /** Sterkte per foto (bestandsnaam naar procent), voor wat afwijkt van [hdrStrength]. Staat een foto er niet in, dan geldt de standaard. */
+    val hdrStrengthByName: Flow<Map<String, Int>> = data.map { StrengthEntries.decode(it[K.hdrStrengthByName]) }.distinctUntilChanged()
+    /** [percent] null haalt de aanpassing weg (terug naar de standaard). */
+    suspend fun setHdrStrengthFor(name: String, percent: Int?) = edit {
+        val now = StrengthEntries.decode(it[K.hdrStrengthByName]).toMutableMap()
+        if (percent == null) now.remove(name) else now[name] = percent.coerceIn(0, 100)
+        it[K.hdrStrengthByName] = StrengthEntries.encode(now)
+    }
+
     /** Preset die Lightroom over een RAW krijgt als de camera-JPG ernaast niet zegt welke het was ("" is geen). Zie `LookPreset`. */
     val lookDefault: Flow<String> = data.map { it[K.lookDefault] ?: "" }
     suspend fun setLookDefault(id: String) = edit { it[K.lookDefault] = id }
@@ -154,5 +169,21 @@ class KeeperPrefs(private val context: Context) {
         context.store.edit { block(it) }
     }
 
-    private companion object { const val DAY_MS = 24L * 60 * 60 * 1000 }
+    private companion object {
+        const val DAY_MS = 24L * 60 * 60 * 1000
+        const val DEFAULT_STRENGTH = 100
+    }
+}
+
+/** De sterkte per foto als lijst van `naam|procent` (een stringset in DataStore). Een bestandsnaam bevat nooit een `|`. */
+object StrengthEntries {
+    fun encode(map: Map<String, Int>): Set<String> = map.map { (name, percent) -> "$name|$percent" }.toSet()
+
+    fun decode(set: Set<String>?): Map<String, Int> = buildMap {
+        set?.forEach { entry ->
+            val at = entry.lastIndexOf('|')
+            val percent = entry.substring(at + 1).toIntOrNull()
+            if (at > 0 && percent != null) put(entry.substring(0, at), percent.coerceIn(0, 100))
+        }
+    }
 }

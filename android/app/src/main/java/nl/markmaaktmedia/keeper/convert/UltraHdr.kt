@@ -82,18 +82,30 @@ class GainMapImage(val width: Int, val height: Int, val channels: Int, val data:
  * van 200 MP nooit als geheel in float in het geheugen komt. Dezelfde formule als het prototype:
  * `HDR = (sdr + offSdr) * 2^(min + (max - min) * G^(1/gamma)) - offHdr`, G bilineair opgeschaald naar het basisbeeld.
  */
-class GainMapSampler(private val meta: GainMapMeta?, private val gm: GainMapImage?, private val width: Int, private val height: Int) {
+class GainMapSampler(
+    private val meta: GainMapMeta?, private val gm: GainMapImage?, private val width: Int, private val height: Int,
+    /**
+     * HDR-sterkte, 0 tot 1: hoeveel van de gain map meetelt. Alle gains (log2) worden met deze factor vermenigvuldigd, dus 1 is de volle HDR
+     * van de camera en 0 de SDR van de camera. Dit is ook wat [GainMapXmp.scaled] in het bestand zet bij HDR behouden.
+     */
+    strength: Float = 1f,
+) {
     val hasGainMap: Boolean get() = meta != null && gm != null
+
+    private val s = strength.coerceIn(0f, 1f)
 
     private val lut: Array<FloatArray>? = meta?.let { m ->
         Array(3) { c ->
             FloatArray(LUT_SIZE + 1) { i ->
                 val g = i.toFloat() / LUT_SIZE
                 val boosted = if (m.gamma[c] == 1f) g else g.toDouble().pow(1.0 / m.gamma[c]).toFloat()
-                2.0.pow((m.min[c] + (m.max[c] - m.min[c]) * boosted).toDouble()).toFloat()
+                2.0.pow((s * (m.min[c] + (m.max[c] - m.min[c]) * boosted)).toDouble()).toFloat()
             }
         }
     }
+
+    // Verschillen de twee offsets, dan zou sterkte 0 niet precies de SDR teruggeven; dit rekent dat bij (bij gelijke offsets is het 0).
+    private val lift: FloatArray = FloatArray(3) { c -> if (meta == null) 0f else (1f - s) * (meta.offHdr[c] - meta.offSdr[c]) }
 
     // Per kolom de twee gain-map-kolommen en het gewicht, eenmalig.
     private val xLow = IntArray(width)
@@ -148,7 +160,7 @@ class GainMapSampler(private val meta: GainMapMeta?, private val gm: GainMapImag
                 val gv = scratch[a + k] * wx1 + scratch[b + k] * wx
                 val factor = tables[c][(gv * toIndex + 0.5f).toInt().coerceIn(0, LUT_SIZE)]
                 val i = x * 3 + c
-                val hdr = (sdr[i] + m.offSdr[c]) * factor - m.offHdr[c]
+                val hdr = (sdr[i] + m.offSdr[c]) * factor - m.offHdr[c] + lift[c]
                 out[i] = if (hdr > 0f) hdr else 0f
             }
         }

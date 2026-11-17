@@ -24,7 +24,11 @@ class ConvertSettings(
     val jpegQuality: Int,
     val toneMap: ToneMap,
     val chroma420: Boolean = true,
-)
+    /** HDR-sterkte, 0 tot 1 (zie [GainMapSampler]); 1 is de volle HDR van de camera, zoals het altijd was. */
+    val strength: Float = 1f,
+) {
+    fun withStrength(value: Float) = ConvertSettings(jpegQuality, toneMap, chroma420, value.coerceIn(0f, 1f))
+}
 
 class ConvertResult(val width: Int, val height: Int, val peak: Float, val gainMapSize: String, val colorSpace: String, val millis: Long)
 
@@ -54,7 +58,7 @@ class Converter(private val stripRows: Int = 256, private val log: (String) -> U
 
         // Eerste pass: de piek van de inhoud, op een verkleind beeld.
         val sample = when { w.toLong() * h >= 40_000_000L -> 4; w.toLong() * h >= 8_000_000L -> 2; else -> 1 }
-        val first = measure(source, layout, gain, sample, onProgress, cancelled)
+        val first = measure(source, layout, gain, sample, settings.strength, onProgress, cancelled)
         var peak = first.peak
         val space = first.space
         log("piek $peak, kleurruimte $space, ${(System.nanoTime() - t0) / 1_000_000} ms")
@@ -71,8 +75,8 @@ class Converter(private val stripRows: Int = 256, private val log: (String) -> U
             if (before > 0f && after > before) peak = (peak * after / before).coerceIn(1.0f, 4.93f)
         }
         // De belichting volgt de camera: de foto komt even helder uit als de SDR-versie die de camera zelf maakte (zie ToneMapper.matching).
-        val mapper = ToneMapper.matching(settings.toneMap, peak, luma, first.samples, first.sampleCount, first.baseMean, first.sdrSamples)
-        val sampler = GainMapSampler(layout.meta, gain, w, h)
+        val mapper = ToneMapper.matching(settings.toneMap, peak, luma, first.samples, first.sampleCount, first.baseMean, first.sdrSamples, settings.strength)
+        val sampler = GainMapSampler(layout.meta, gain, w, h, settings.strength)
         val segments = segmentsFor(layout.primary, layout, space)
 
         // Vier trappen naast elkaar: een thread decodeert de volgende strook, de pixelstap rekent de huidige over meerdere threads, en het
@@ -244,7 +248,7 @@ class Converter(private val stripRows: Int = 256, private val log: (String) -> U
 
     /** Piek uit het 99,95e percentiel van de luminantie van de gereconstrueerde HDR, op een verkleind beeld. */
     private fun measure(
-        source: JpegSource, layout: UltraHdrLayout, gain: GainMapImage, sample: Int,
+        source: JpegSource, layout: UltraHdrLayout, gain: GainMapImage, sample: Int, strength: Float,
         onProgress: (Float) -> Unit, cancelled: () -> Boolean,
     ): Measured {
         val opts = BitmapFactory.Options().apply { inPreferredConfig = Bitmap.Config.ARGB_8888; inSampleSize = sample }
@@ -253,7 +257,7 @@ class Converter(private val stripRows: Int = 256, private val log: (String) -> U
         val luma = if (space.contains("P3", ignoreCase = true)) ToneMapper.LUMA_P3 else ToneMapper.LUMA_SRGB
         val bw = bmp.width
         val bh = bmp.height
-        val sampler = GainMapSampler(layout.meta, gain, bw, bh)
+        val sampler = GainMapSampler(layout.meta, gain, bw, bh, strength)
         val hist = LuminanceHistogram()
         val rowBytes = bmp.rowBytes
         val raw = ByteArray(rowBytes * bh)

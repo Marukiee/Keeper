@@ -93,6 +93,46 @@ class UltraHdrTest {
         assertArrayEquals(row, out, 0f)
     }
 
+    /** Gain map van 2x2 met links 0 en rechts 255 (één kanaal), log2-gain van 0 tot 2 (dus links x1, rechts x4), en de gegeven offsets. */
+    private fun tiny(offSdr: Float = 0f, offHdr: Float = 0f): Pair<GainMapMeta, GainMapImage> {
+        fun v(x: Float) = floatArrayOf(x, x, x)
+        val meta = GainMapMeta(v(0f), v(2f), v(1f), v(offSdr), v(offHdr), 0f, 2f, false)
+        return meta to GainMapImage(2, 2, 1, byteArrayOf(0, 255.toByte(), 0, 255.toByte()))
+    }
+
+    private fun row(meta: GainMapMeta, gain: GainMapImage, strength: Float): FloatArray {
+        val sampler = GainMapSampler(meta, gain, 2, 2, strength)
+        val sdr = floatArrayOf(0.2f, 0.2f, 0.2f, 0.2f, 0.2f, 0.2f)
+        val out = FloatArray(6)
+        sampler.hdrRow(0, sdr, out)
+        return out
+    }
+
+    @Test fun `sterkte 1 is de volle HDR, sterkte 0 geeft de SDR van de camera terug`() {
+        val (meta, gain) = tiny()
+        val full = row(meta, gain, 1f)
+        val default = GainMapSampler(meta, gain, 2, 2).let { s -> FloatArray(6).also { s.hdrRow(0, floatArrayOf(0.2f, 0.2f, 0.2f, 0.2f, 0.2f, 0.2f), it) } }
+        assertArrayEquals(default, full, 0f)
+        assertEquals(0.2f * 4f, full[3], 0.02f) // rechter pixel: gain-map-waarde 255 = 2^2
+        val none = row(meta, gain, 0f)
+        for (v in none) assertEquals(0.2f, v, 1e-6f)
+    }
+
+    @Test fun `de sterkte schaalt de gain in log2 dus de helft is de wortel van de volle boost`() {
+        val (meta, gain) = tiny()
+        val full = row(meta, gain, 1f)
+        val half = row(meta, gain, 0.5f)
+        for (i in 0 until 6) assertEquals("kanaal $i", 0.2f * Math.sqrt((full[i] / 0.2f).toDouble()).toFloat(), half[i], 1e-4f)
+    }
+
+    @Test fun `bij verschillende offsets geeft sterkte 0 ook precies de SDR terug`() {
+        val (meta, gain) = tiny(offSdr = 0.015625f, offHdr = 0f)
+        for (v in row(meta, gain, 0f)) assertEquals(0.2f, v, 1e-6f)
+        // En de volle sterkte is ongewijzigd: (sdr + offSdr) * factor - offHdr.
+        val full = row(meta, gain, 1f)
+        assertEquals((0.2f + 0.015625f) * 4f, full[3], 0.02f)
+    }
+
     @Test fun `sRGB heen en terug is exact voor alle 8-bit waarden`() {
         for (v in 0..255) assertEquals("waarde $v", v, Srgb.toByte(Srgb.toLinear[v]))
         assertEquals(255, Srgb.toByte(7f))

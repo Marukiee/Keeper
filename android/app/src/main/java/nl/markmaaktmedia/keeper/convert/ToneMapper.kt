@@ -142,13 +142,17 @@ class ToneMapper(
          *
          * [samples] zijn lineaire HDR-pixels (r, g, b achter elkaar, [count] stuks) uit de eerste pass. [sdrSamples] zijn dezelfde pixels
          * in de SDR van de camera; met die erbij telt het anker (zie [map] met SDR) mee in het gemiddelde, zoals het in de uitvoer meetelt.
+         *
+         * Bij een lagere HDR-[strength] (0 tot 1) telt minder van de gain map mee en is de HDR minder helder dan de camera-SDR; de belichting mag dan
+         * verder terug naar 1,0 (de maximale belichting gaat van die van de sterkte bij 1 naar 1,0 bij 0), anders zou een foto zonder HDR toch
+         * donkerder uitkomen dan wat de camera zelf maakte. Sterkte 0 met piek 1,0 en belichting 1,0 is de identiteit.
          */
         fun matching(
             t: nl.markmaaktmedia.keeper.scan.ToneMap, peak: Float, luma: FloatArray,
-            samples: FloatArray, count: Int, targetMean: Double, sdrSamples: FloatArray? = null,
+            samples: FloatArray, count: Int, targetMean: Double, sdrSamples: FloatArray? = null, strength: Float = 1f,
         ): ToneMapper {
-            val cap = t.exposure.toFloat()
-            if (count == 0 || cap <= MIN_EXPOSURE) return of(t, peak, luma)
+            val cap = 1f - strength.coerceIn(0f, 1f) * (1f - t.exposure.toFloat())
+            if (count == 0 || cap <= MIN_EXPOSURE) return ToneMapper(peak, cap, liftedKnee(t.knee.toFloat()), 0.5f, luma)
             val out = FloatArray(3)
             fun meanAt(exposure: Float): Double {
                 val m = ToneMapper(peak, exposure, t.knee.toFloat(), 0.5f, luma)

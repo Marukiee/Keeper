@@ -208,4 +208,32 @@ class ToneMapperTest {
         for (i in 0 until n) { reference.map(hdr[i * 3], hdr[i * 3 + 1], hdr[i * 3 + 2], sdr[i * 3], sdr[i * 3 + 1], sdr[i * 3 + 2], out, 0); sum += luma[0] * out[0] + luma[1] * out[1] + luma[2] * out[2] }
         assert(sum / n <= target * 1.005) { "gemiddelde ${sum / n} doel $target" }
     }
+
+    @Test fun `sterkte 0 laat de camera-SDR ongemoeid, ook bij een preset met belichting onder 1`() {
+        val luma = ToneMapper.LUMA_P3
+        val n = 400
+        // HDR gelijk aan SDR (sterkte 0 in de sampler): een verloop van donker tot wit.
+        val sdr = FloatArray(n * 3) { (it / 3) / (n - 1f) }
+        var target = 0.0
+        for (i in 0 until n) target += luma[0] * sdr[i * 3] + luma[1] * sdr[i * 3 + 1] + luma[2] * sdr[i * 3 + 2]
+        target /= n
+        for (t in nl.markmaaktmedia.keeper.scan.ToneMap.entries) {
+            val m = ToneMapper.matching(t, 1.0f, luma, sdr, n, target, sdr, 0f)
+            val out = FloatArray(3)
+            for (v in floatArrayOf(0.05f, 0.2f, 0.5f, 0.8f, 0.95f, 1.0f)) {
+                m.map(v, v, v, v, v, v, out, 0)
+                for (c in 0..2) assertEquals("${t.id} bij $v", v, out[c], 0.01f)
+            }
+        }
+    }
+
+    @Test fun `de maximale belichting loopt met de sterkte van de preset naar 1`() {
+        val luma = ToneMapper.LUMA_P3
+        val n = 200
+        val bright = FloatArray(n * 3) { 0.2f } // doel veel hoger dan de uitkomst: de belichting loopt tegen zijn maximum aan
+        val normaal = nl.markmaaktmedia.keeper.scan.ToneMap.Normaal
+        assertEquals(0.90f, ToneMapper.matching(normaal, 2.0f, luma, bright, n, 10.0, null, 1f).exposure, 1e-6f)
+        assertEquals(0.95f, ToneMapper.matching(normaal, 2.0f, luma, bright, n, 10.0, null, 0.5f).exposure, 1e-6f)
+        assertEquals(1.00f, ToneMapper.matching(normaal, 2.0f, luma, bright, n, 10.0, null, 0f).exposure, 1e-6f)
+    }
 }

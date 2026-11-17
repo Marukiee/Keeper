@@ -100,6 +100,9 @@ class ConvertJob(private val context: Context, private val prefs: KeeperPrefs, p
             jpegQuality = (prefs.quality.first() - 2).coerceIn(50, 98),
             toneMap = ToneMap.of(prefs.toneMap.first()),
         )
+        // De HDR-sterkte: de standaard uit Instellingen, of wat Mark voor deze ene foto instelde (per bestandsnaam van het origineel).
+        val defaultStrength = prefs.hdrStrength.first()
+        val strengthByName = prefs.hdrStrengthByName.first()
 
         work.deleteRecursively(); work.mkdirs()
         store.removeLeftovers(folder)
@@ -122,7 +125,8 @@ class ConvertJob(private val context: Context, private val prefs: KeeperPrefs, p
             val name = step.photo.item.name
             onProgress(ConvertProgress(i + 1, plan.steps.size, name, 0f, step.photo.item, step.how, alreadyDone))
             try {
-                val result = writeOne(step, folder, settings, cancelled) { onProgress(ConvertProgress(i + 1, plan.steps.size, name, it, step.photo.item, step.how, alreadyDone)) }
+                val strength = (strengthByName[name] ?: defaultStrength) / 100f
+                val result = writeOne(step, folder, settings.withStrength(strength), cancelled) { onProgress(ConvertProgress(i + 1, plan.steps.size, name, it, step.photo.item, step.how, alreadyDone)) }
                 if (step.how == How.Copy || result.copiedAsIs) copied++ else converted++
                 bytesIn += result.bytesIn
                 bytesOut += result.bytesOut
