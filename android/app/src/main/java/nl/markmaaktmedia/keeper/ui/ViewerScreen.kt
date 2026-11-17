@@ -93,6 +93,9 @@ import nl.markmaaktmedia.keeper.scan.Status
 import nl.markmaaktmedia.keeper.ui.components.KeeperIconButton
 import nl.markmaaktmedia.keeper.ui.components.PrimaryPillButton
 import nl.markmaaktmedia.keeper.ui.components.SecondaryPillButton
+import nl.markmaaktmedia.keeper.ui.theme.ConnectedEndShape
+import nl.markmaaktmedia.keeper.ui.theme.ConnectedGap
+import nl.markmaaktmedia.keeper.ui.theme.ConnectedStartShape
 import nl.markmaaktmedia.keeper.ui.theme.KeeperIcons
 import nl.markmaaktmedia.keeper.ui.theme.KeeperMotion
 import nl.markmaaktmedia.keeper.ui.theme.PillShape
@@ -365,12 +368,15 @@ fun ViewerScreen(
             // IntrinsicSize.Min: de prullenbak is precies zo hoog als de pillen ernaast, ook bij een ander lettertype.
             Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (current.selectable) {
-                    if (current.discarded) PrimaryPillButton(
-                        stringResource(R.string.viewer_discarded), { onUndoReject(current) }, Modifier.weight(1f), icon = KeeperIcons.Close,
-                        container = MaterialTheme.colorScheme.errorContainer, content = MaterialTheme.colorScheme.onErrorContainer,
-                    ) else SecondaryPillButton(stringResource(R.string.viewer_discard), { onReject(current); next() }, Modifier.weight(1f), icon = KeeperIcons.Close)
-                    if (current.selected) PrimaryPillButton(stringResource(R.string.viewer_kept), { onSelect(current, false) }, Modifier.weight(1f), icon = KeeperIcons.Check)
-                    else SecondaryPillButton(stringResource(R.string.viewer_keep), { if (current.askBeforeKeeping) askEdited = true else { onSelect(current, true); next() } }, Modifier.weight(1f), icon = KeeperIcons.Check)
+                    // Verbonden knoppen zoals in Material 3 Expressive: een haartje uit elkaar, buitenkant helemaal rond, binnenkant klein.
+                    Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(ConnectedGap)) {
+                        if (current.discarded) PrimaryPillButton(
+                            stringResource(R.string.viewer_discarded), { onUndoReject(current) }, Modifier.weight(1f), icon = KeeperIcons.Close,
+                            container = MaterialTheme.colorScheme.errorContainer, content = MaterialTheme.colorScheme.onErrorContainer, shape = ConnectedStartShape,
+                        ) else SecondaryPillButton(stringResource(R.string.viewer_discard), { onReject(current); next() }, Modifier.weight(1f), icon = KeeperIcons.Close, shape = ConnectedStartShape)
+                        if (current.selected) PrimaryPillButton(stringResource(R.string.viewer_kept), { onSelect(current, false) }, Modifier.weight(1f), icon = KeeperIcons.Check, shape = ConnectedEndShape)
+                        else SecondaryPillButton(stringResource(R.string.viewer_keep), { if (current.askBeforeKeeping) askEdited = true else { onSelect(current, true); next() } }, Modifier.weight(1f), icon = KeeperIcons.Check, shape = ConnectedEndShape)
+                    }
                 } else Box(Modifier.weight(1f))
                 // Naar de prullenbak, na Android's eigen bevestiging; terug te zetten.
                 KeeperIconButton(

@@ -649,6 +649,8 @@ fun PrimaryPillButton(
     enabled: Boolean = true,
     container: Color = MaterialTheme.colorScheme.primary,
     content: Color = MaterialTheme.colorScheme.onPrimary,
+    /** A pill, or one half of a connected pair (see ConnectedStartShape). */
+    shape: androidx.compose.ui.graphics.Shape = PillShape,
 ) {
     // Blue when it can be pressed, grey when it cannot, and the change is a fade, not a switch.
     val fill by androidx.compose.animation.animateColorAsState(
@@ -659,7 +661,7 @@ fun PrimaryPillButton(
     )
     Row(
         modifier = modifier
-            .clip(PillShape)
+            .clip(shape)
             .background(fill)
             .bouncyClickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 24.dp, vertical = 14.dp),
@@ -691,6 +693,7 @@ fun SecondaryPillButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     icon: Painter? = null,
+    shape: androidx.compose.ui.graphics.Shape = PillShape,
 ) {
     PrimaryPillButton(
         label = label,
@@ -699,6 +702,7 @@ fun SecondaryPillButton(
         icon = icon,
         container = MaterialTheme.colorScheme.surfaceContainerHigh,
         content = MaterialTheme.colorScheme.onSurface,
+        shape = shape,
     )
 }
 

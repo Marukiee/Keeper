@@ -25,6 +25,16 @@ val KeeperShapes = Shapes(
 val PillShape = RoundedCornerShape(percent = 50)
 
 /**
+ * Connected buttons, the button group of Material 3 Expressive: two buttons a hair apart, the outer corners fully round and the inner
+ * corners small. [ConnectedStartShape] is the left button and [ConnectedEndShape] the right one (mirrored in right-to-left).
+ */
+val ConnectedInner = 8.dp
+val ConnectedStartShape = RoundedCornerShape(topStart = CornerSize(50), bottomStart = CornerSize(50), topEnd = CornerSize(ConnectedInner), bottomEnd = CornerSize(ConnectedInner))
+val ConnectedEndShape = RoundedCornerShape(topStart = CornerSize(ConnectedInner), bottomStart = CornerSize(ConnectedInner), topEnd = CornerSize(50), bottomEnd = CornerSize(50))
+/** The gap between connected buttons. */
+val ConnectedGap = 2.dp
+
+/**
  * A squircle with continuous corners, the kind where the curve blends into the
  * straight edge instead of meeting it.
  *
