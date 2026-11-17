@@ -114,6 +114,13 @@ gekozen worden terwijl de pixels minder HDR hebben. `ToneMapper.matching(..., st
 uitkomen dan de camera. Lokaal contrast verdwijnt bij lage sterkte vanzelf (geen opticht, dus gewicht 0). Standaard: `KeeperPrefs.hdrStrength` (Int, 100). Per foto: `hdrStrengthByName` (stringset `naam|procent`, de
 bestandsnaam van het origineel, zoals `skipped`; `StrengthEntries`). `ConvertJob` pakt per foto `strengthByName[naam] ?: standaard`. Een bestaande uitvoer verandert niet door een andere sterkte: daarvoor is "Nieuwe versie maken".
 
+Instelling en schuif (2026-11-18): Instellingen > Omzetten heeft een schuif "HDR-sterkte" (stappen van 5%, opslaan bij loslaten; `HdrStrengthSlider`). In de viewer staat in het drie-puntjesmenu "HDR-sterkte" (alleen bij een HDR-JPG): dat opent
+`HdrStrengthPanel` onder de foto, met de schuif, "Standaard (x%)" (haalt de eigen sterkte van deze foto weg) en "Omzetten met deze" (slaat op en start `onConvertOne`, dus een nieuwe versie naast de oude). Terug sluit eerst het paneel.
+De foto boven het paneel beweegt live mee: `ZoomablePhoto(strengthPreview)` opent één keer een `ConvertPreview` (de foto op zo'n 1000 tot 2000 px, in het geheugen, plus de gain map) en `render` rekent bij elke stap alleen gain, lokaal contrast en tone map opnieuw
+(dezelfde `ConvertCore` als de echte omzetting: `analyse`, `prepare`, `pixels`, `loadGainMap`), dus het voorbeeld is wat de omzetting straks maakt; een nieuwe stap annuleert de vorige berekening (`produceState`-sleutels, 30 ms wachten).
+`Converter` gebruikt dezelfde `ConvertCore`; de uitvoer bij 100% is byte voor byte gelijk aan die van voor de verplaatsing (gemeten op de emulator). Gemeten op de 70 MP-foto van 17 november (154231): bij 0% is de uitvoer de camera-SDR (gemiddeld verschil 0,5 code,
+alleen JPEG-ruis), bij 50% ertussen. Debug: `ConvertDebugReceiver` neemt `--ei strength 0..100`.
+
 Model van de galerij: bewaard (vinkje) is wat meegaat naar de uitvoermap en blijft staan. Camera-JPG's en RAW's staan standaard
 **uit**, Lightroom-exports en Galerij-bewerkingen standaard **aan**. Opruimen (per dag) stuurt alleen niet-bewaarde camera-JPG's
 zonder hartje naar de prullenbak; RAW's, exports, bewerkingen en hun originelen blijven altijd staan.

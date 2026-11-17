@@ -64,7 +64,16 @@ import nl.markmaaktmedia.keeper.graph
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import nl.markmaaktmedia.keeper.convert.ConvertPreview
+import nl.markmaaktmedia.keeper.convert.ConvertSettings
+import nl.markmaaktmedia.keeper.convert.JpegSource
+import nl.markmaaktmedia.keeper.scan.MediaScanner
+import nl.markmaaktmedia.keeper.scan.ToneMap
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -157,6 +166,13 @@ fun ViewerScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val defaultLook by context.graph.prefs.lookDefault.collectAsState(initial = "")
+    // HDR-sterkte van één foto: het paneel staat onder de foto, die live meebeweegt (zie ZoomablePhoto). De keuze wordt bij loslaten opgeslagen.
+    val strengthPrefs = context.graph.prefs
+    val defaultStrength by strengthPrefs.hdrStrength.collectAsState(initial = 100)
+    val strengthByName by strengthPrefs.hdrStrengthByName.collectAsState(initial = emptyMap())
+    var strengthOpen by remember { mutableStateOf(false) }
+    var liveStrength by remember { mutableIntStateOf(100) }
+    var previewBusy by remember { mutableStateOf(false) }
     val pager = rememberPagerState(initialPage = list.indexOfFirst { it.item.id == startId }.coerceAtLeast(0)) { list.size }
     var zoomed by remember { mutableStateOf(false) }
     // Naar beneden slepen sluit de foto, zoals in Immich: de foto blijft onder je vinger, ook zijwaarts en weer omhoog, en wordt kleiner
@@ -183,7 +199,7 @@ fun ViewerScreen(
     // Openen: de foto groeit uit zijn tegel; tot dat klaar is staat de pager uit en komt de achtergrond (openT) geleidelijk binnen.
     var opening by remember { mutableStateOf(true) }
     var openT by remember { mutableFloatStateOf(0f) }
-    LaunchedEffect(pager.currentPage) { zoomed = false }
+    LaunchedEffect(pager.currentPage) { zoomed = false; strengthOpen = false }
     val current = list[pager.currentPage.coerceIn(0, list.lastIndex)]
     val currentId by rememberUpdatedState(current.item.id)
     // Tijdens het openen meldt het openen zelf de foto, op het moment dat de tegel leeg moet.
@@ -253,6 +269,8 @@ fun ViewerScreen(
     val closeLatest by rememberUpdatedState<(Velocity) -> Unit> { closeNow(it) }
     // Terug (knop of gebaar) sluit op dezelfde manier. Altijd actief, zodat het scherm niet midden in de vlucht wegvalt.
     BackHandler { closeLatest(Velocity.Zero) }
+    // Staat het sterktepaneel open, dan sluit terug eerst dat.
+    BackHandler(enabled = strengthOpen) { strengthOpen = false }
     // Knoppen en kop zijn al weg na een vijfde van het sleepbereik, zodat ze niet over de galerij eronder hangen.
     // Bij het openen komen ze pas binnen als de foto bijna op zijn plek is.
     val barsFade: androidx.compose.ui.graphics.GraphicsLayerScope.() -> Unit = { alpha = ((openT - 0.5f) * 2f).coerceIn(0f, 1f) * (1f - (progress() * BARS_FADE).coerceAtMost(1f)) }
@@ -295,6 +313,12 @@ fun ViewerScreen(
                         // Alleen wat HDR-naar-SDR kan: een JPG met gain map of de camera-versie van een RAW.
                         enabled = !converting && (asked.hdr || asked.item.isDng),
                         onClick = { menuOpen = false; onConvertOne(asked) },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.viewer_hdr_strength)) },
+                        // Alleen een HDR-JPG heeft een gain map om te schuiven.
+                        enabled = asked.hdr,
+                        onClick = { menuOpen = false; liveStrength = strengthByName[asked.item.name] ?: defaultStrength; strengthOpen = true },
                     )
                 }
             }
@@ -352,10 +376,27 @@ fun ViewerScreen(
                 key = { list.getOrNull(it)?.item?.id ?: it },
             ) { page ->
                 val photo = list.getOrNull(page)
-                if (photo != null) ZoomablePhoto(photo, active = page == pager.currentPage, onZoomed = { zoomed = it })
+                if (photo != null) ZoomablePhoto(
+                    photo, active = page == pager.currentPage, onZoomed = { zoomed = it },
+                    strengthPreview = if (strengthOpen && page == pager.currentPage && photo.hdr) liveStrength else null,
+                    onPreviewBusy = { previewBusy = it },
+                )
             }
         }
-        Column(Modifier.graphicsLayer(block = barsFade).padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        if (strengthOpen) HdrStrengthPanel(
+            percent = liveStrength,
+            defaultPercent = defaultStrength,
+            hasOverride = strengthByName.containsKey(current.item.name) || liveStrength != defaultStrength,
+            converting = converting,
+            loading = previewBusy,
+            onChange = { liveStrength = it },
+            onFinished = { val asked = current; scope.launch { strengthPrefs.setHdrStrengthFor(asked.item.name, liveStrength) } },
+            onReset = { val asked = current; liveStrength = defaultStrength; scope.launch { strengthPrefs.setHdrStrengthFor(asked.item.name, null) } },
+            onDone = { strengthOpen = false },
+            // Eerst opslaan: de omzetting leest de sterkte van deze foto bij het begin.
+            onConvert = { val asked = current; strengthOpen = false; scope.launch { strengthPrefs.setHdrStrengthFor(asked.item.name, liveStrength); onConvertOne(asked) } },
+            modifier = Modifier.graphicsLayer(block = barsFade).padding(horizontal = 12.dp, vertical = 8.dp),
+        ) else Column(Modifier.graphicsLayer(block = barsFade).padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(stringResource(current.status.label), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
                 Text(
@@ -433,8 +474,37 @@ private class Hero(val bitmap: android.graphics.Bitmap, val from: Rect, val to: 
  * pas als er is ingezoomd, of met twee vingers, nemen we het gebaar over.
  */
 @Composable
-private fun ZoomablePhoto(photo: Photo, active: Boolean, onZoomed: (Boolean) -> Unit) {
-    val scanner = LocalContext.current.graph.scanner
+private fun ZoomablePhoto(
+    photo: Photo, active: Boolean, onZoomed: (Boolean) -> Unit,
+    /** Is dit gezet (0 tot 100), dan toont de foto wat de omzetting bij die HDR-sterkte zou maken, en beweegt mee als het getal verandert. */
+    strengthPreview: Int? = null,
+    onPreviewBusy: (Boolean) -> Unit = {},
+) {
+    val context = LocalContext.current
+    val scanner = context.graph.scanner
+    val tone by context.graph.prefs.toneMap.collectAsState(initial = "normaal")
+    val previewing = strengthPreview != null
+    // Het voorbeeld wordt één keer gedecodeerd (verkleind) zodra het paneel opengaat; elke stap van de schuif rekent daarna alleen de tone map opnieuw.
+    val session: ConvertPreview? by produceState<ConvertPreview?>(null, photo.item.id, previewing) {
+        value = null
+        if (previewing) {
+            onPreviewBusy(true)
+            value = withContext(Dispatchers.IO) {
+                ConvertPreview.open(JpegSource { context.contentResolver.openFileDescriptor(MediaScanner.imageUri(photo.item.id), "r") ?: throw java.io.IOException("niet te openen") })
+            }
+            onPreviewBusy(false)
+        }
+    }
+    val live: ImageBitmap? by produceState<ImageBitmap?>(null, session, strengthPreview, tone) {
+        val s = session
+        val strength = strengthPreview
+        if (s == null || strength == null) { value = null; if (strength == null) onPreviewBusy(false); return@produceState }
+        onPreviewBusy(true)
+        // Een nieuwe stap annuleert deze berekening (de sleutels veranderen): kort wachten voorkomt werk dat meteen wordt weggegooid.
+        delay(30)
+        value = s.render(ConvertSettings(90, ToneMap.of(tone), true, strength / 100f)).asImageBitmap()
+        onPreviewBusy(false)
+    }
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
     var box by remember { mutableStateOf(IntSize.Zero) }
@@ -511,7 +581,7 @@ private fun ZoomablePhoto(photo: Photo, active: Boolean, onZoomed: (Boolean) -> 
                 }
             },
     ) {
-        (detail ?: preview)?.let {
+        (live ?: detail ?: preview)?.let {
             Image(
                 it, null,
                 Modifier.fillMaxSize().graphicsLayer { scaleX = scale; scaleY = scale; translationX = offset.x; translationY = offset.y },

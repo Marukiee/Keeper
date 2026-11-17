@@ -15,7 +15,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -31,6 +33,7 @@ import nl.markmaaktmedia.keeper.scan.ToneMap
 import nl.markmaaktmedia.keeper.ui.ScreenHeader
 import nl.markmaaktmedia.keeper.ui.components.ActionRow
 import nl.markmaaktmedia.keeper.ui.components.ContentRow
+import nl.markmaaktmedia.keeper.ui.components.HdrStrengthSlider
 import nl.markmaaktmedia.keeper.ui.components.InfoRow
 import nl.markmaaktmedia.keeper.ui.components.SectionHeader
 import nl.markmaaktmedia.keeper.ui.components.SegmentedPillRow
@@ -122,9 +125,13 @@ internal fun ConvertPage(onBack: () -> Unit, contentPadding: PaddingValues) {
     val toneMapId by prefs.toneMap.collectAsState(initial = "normaal")
     val toneMap = ToneMap.of(toneMapId)
 
+    val savedStrength by prefs.hdrStrength.collectAsState(initial = 100)
+    // Tijdens het schuiven telt de schuif zelf; opgeslagen wordt bij loslaten.
+    var strength by remember(savedStrength) { mutableIntStateOf(savedStrength) }
+
     SettingsPageFrame(stringResource(R.string.settings_convert), onBack, contentPadding) {
         SettingsGroup {
-            ContentRow(0, 2, KeeperIcons.Image, stringResource(R.string.settings_quality)) {
+            ContentRow(0, 3, KeeperIcons.Image, stringResource(R.string.settings_quality)) {
                 SegmentedPillRow(JpegQuality.options, quality, { "q$it" }, { scope.launch { prefs.setQuality(it) } }, equalWidth = true)
                 val bpp = JpegQuality.bitsPerPixel(quality)
                 Text(
@@ -132,7 +139,14 @@ internal fun ConvertPage(onBack: () -> Unit, contentPadding: PaddingValues) {
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            ContentRow(1, 2, KeeperIcons.Tune, stringResource(R.string.settings_tonemap)) {
+            ContentRow(1, 3, KeeperIcons.Tune, stringResource(R.string.settings_hdr_strength)) {
+                HdrStrengthSlider(strength, { strength = it }, onFinished = { scope.launch { prefs.setHdrStrength(strength) } })
+                Text(
+                    stringResource(R.string.settings_hdr_strength_body),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            ContentRow(2, 3, KeeperIcons.Tune, stringResource(R.string.settings_tonemap)) {
                 val names = mapOf(
                     ToneMap.Licht to stringResource(R.string.tonemap_licht),
                     ToneMap.Normaal to stringResource(R.string.tonemap_normaal),

@@ -219,4 +219,15 @@
     <string name="convert_failures_more">en nog %1$d</string>
     <string name="convert_close">OK</string>
     <string name="convert_need_location">Keeper heeft toegang tot de locatie van je foto\'s nodig, anders gaan de GPS-gegevens verloren. Sta dat toe in de instellingen van Keeper.</string>
+    <string name="settings_hdr_strength">HDR-sterkte</string>
+    <string name="settings_hdr_strength_body" formatted="false">Hoeveel van de HDR van de camera meetelt. 100% is de volle HDR, 0% de SDR-versie van de camera. Per foto kan het ook.</string>
+    <string name="hdr_strength_percent">%1$d%%</string>
+    <string name="hdr_strength_sdr">SDR</string>
+    <string name="hdr_strength_hdr">HDR</string>
+    <string name="viewer_hdr_strength">HDR-sterkte</string>
+    <string name="hdr_strength_default">Standaard (%1$d%%)</string>
+    <string name="hdr_strength_done">Klaar</string>
+    <string name="hdr_strength_convert">Omzetten met deze</string>
+    <string name="hdr_strength_loading">Voorbeeld klaarmaken…</string>
+    <string name="hdr_strength_unavailable">Geen voorbeeld voor deze foto</string>
 </resources>

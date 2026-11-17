@@ -19,7 +19,7 @@ import nl.markmaaktmedia.keeper.scan.ToneMap
 
 /**
  * adb shell am broadcast -n nl.markmaaktmedia.keeper.debug/nl.markmaaktmedia.keeper.debug.ConvertDebugReceiver \
- *   -a nl.markmaaktmedia.keeper.CONVERT --es in foto.jpg --es out uit.jpg --ei q 92 --es tonemap normaal
+ *   -a nl.markmaaktmedia.keeper.CONVERT --es in foto.jpg --es out uit.jpg --ei q 92 --es tonemap normaal [--ei strength 50]
  * Bestanden staan in de eigen map van de app (filesDir); de uitslag staat in logcat onder KeeperConvert.
  *
  * Met `--es ids 123,456` draait in plaats daarvan de echte keten (`ConvertJob`: plan, lezen via MediaStore, uitvoer in MediaStore) op die
@@ -35,6 +35,7 @@ class ConvertDebugReceiver : BroadcastReceiver() {
         val q = intent.getIntExtra("q", 92)
         val tone = ToneMap.of(intent.getStringExtra("tonemap") ?: "normaal")
         val chroma420 = intent.getStringExtra("chroma") != "444"
+        val strength = intent.getIntExtra("strength", 100).coerceIn(0, 100) / 100f
         thread(name = "convert-debug") {
             try {
                 val input = File(context.filesDir, name)
@@ -43,7 +44,7 @@ class ConvertDebugReceiver : BroadcastReceiver() {
                     Converter(log = { Log.i(TAG, it) }).convert(
                         source = { ParcelFileDescriptor.open(input, ParcelFileDescriptor.MODE_READ_ONLY) },
                         out = out,
-                        settings = ConvertSettings(q, tone, chroma420),
+                        settings = ConvertSettings(q, tone, chroma420, strength),
                         segmentsFor = { head, _, _ -> head.icc()?.let { JpegSegments.icc(it) } ?: emptyList() },
                         onProgress = {},
                     )
