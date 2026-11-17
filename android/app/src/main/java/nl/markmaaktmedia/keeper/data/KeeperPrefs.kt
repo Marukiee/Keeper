@@ -91,6 +91,16 @@ class KeeperPrefs(private val context: Context) {
     }
 
     /**
+     * Alles weer uit: opnieuw beginnen. De lijst met bewaarde foto's gaat helemaal leeg (ook namen van foto's die er niet meer zijn), en
+     * de Lightroom-exports en Galerij-bewerkingen, die standaard aanstaan, komen op de uitzetlijst ([exclude]). De kruisjes van "niet
+     * bewaren" blijven staan; die zeggen alleen dat je naar een foto gekeken hebt.
+     */
+    suspend fun clearSelection(exclude: List<String>) = edit {
+        it[K.cameraVersion] = emptySet()
+        it[K.skipped] = (it[K.skipped] ?: emptySet()) + exclude
+    }
+
+    /**
      * Bewust niet bewaren (de kruisknop in Bekijken): gaat niet mee en krijgt een kruisje, om te zien dat je er al naar gekeken hebt.
      * Het verschil met gewoon uitgezet is alleen het kruisje; Opruimen verandert er niet van.
      */

@@ -86,6 +86,13 @@
     <string name="gallery_picked">%1$d geselecteerd</string>
     <string name="gallery_pick_hint">Selecteer foto\'s</string>
     <string name="gallery_prepare">Omzetten</string>
+    <string name="gallery_clear">Selectie wissen</string>
+    <string name="gallery_clear_title">Selectie wissen?</string>
+    <string name="gallery_clear_confirm">Selectie wissen</string>
+    <plurals name="gallery_clear_body">
+        <item quantity="one">%1$d bewaarde foto wordt niet meer bewaard, zodat je opnieuw kunt beginnen. De foto zelf blijft staan en wat al is omgezet blijft in de uitvoermap. Foto\'s met een kruisje houden hun kruisje.</item>
+        <item quantity="other">%1$d bewaarde foto\'s worden niet meer bewaard, zodat je opnieuw kunt beginnen. De foto\'s zelf blijven staan en wat al is omgezet blijft in de uitvoermap. Foto\'s met een kruisje houden hun kruisje.</item>
+    </plurals>
     <string name="gallery_no_favorites_title">Geen favorieten</string>
     <string name="gallery_no_favorites_body">Hier staan foto\'s met een hartje uit de Galerij van je telefoon, als die het hartje in Android opslaat.</string>
     <string name="gallery_empty_filter">Niets in deze selectie</string>

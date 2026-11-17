@@ -51,6 +51,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { graph.prefs.setSelection(keep.map { it.item.name }, exclude.map { it.item.name }, on) }
     }
 
+    /** Opnieuw beginnen: niets gaat meer mee. Foto's die al omgezet zijn blijven omgezet, en de kruisjes blijven staan. */
+    fun clearSelection() {
+        val exclude = state.value.photos.filter { it.goesAlong && it.defaultsOn }.map { it.item.name }
+        viewModelScope.launch { graph.prefs.clearSelection(exclude) }
+    }
+
     /** Bewust niet bewaren: uit de selectie en met een kruisje. */
     fun reject(photos: List<Photo>) {
         val targets = photos.filter { it.selectable }

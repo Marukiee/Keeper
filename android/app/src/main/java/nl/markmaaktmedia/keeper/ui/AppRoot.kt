@@ -152,6 +152,7 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
                         { sub = Sub.Overview },
                         trash,
                         startConvert, converting, paused,
+                        { vm.clearSelection() },
                         bounds = tileBounds,
                         // Zolang de viewer open staat blijft de tegel van de getoonde foto leeg.
                         hiddenId = if (sub == Sub.Viewer) viewerCurrent else null,

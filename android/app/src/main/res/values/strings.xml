@@ -88,6 +88,13 @@
     <string name="gallery_picked">%1$d selected</string>
     <string name="gallery_pick_hint">Select photos</string>
     <string name="gallery_prepare">Convert</string>
+    <string name="gallery_clear">Clear selection</string>
+    <string name="gallery_clear_title">Clear the selection?</string>
+    <string name="gallery_clear_confirm">Clear selection</string>
+    <plurals name="gallery_clear_body">
+        <item quantity="one">%1$d kept photo will no longer be kept, so you can start over. The photo itself stays where it is, and anything already converted stays in the output folder. Photos you marked with a cross keep their cross.</item>
+        <item quantity="other">%1$d kept photos will no longer be kept, so you can start over. The photos themselves stay where they are, and anything already converted stays in the output folder. Photos you marked with a cross keep their cross.</item>
+    </plurals>
     <string name="gallery_no_favorites_title">No favorites</string>
     <string name="gallery_no_favorites_body">Photos with a heart from your phone\'s Gallery show up here, if it stores the heart in Android.</string>
     <string name="gallery_empty_filter">Nothing in this selection</string>

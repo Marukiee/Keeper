@@ -153,4 +153,25 @@ class ClassifierTest {
         assertEquals(Status.Done, r.first { it.item.id == jpg.id }.status)
         assertEquals(Status.LightroomExport, r.first { it.item.id == export.id }.status)
     }
+
+    @Test fun clearingTheSelectionTurnsEverythingOffAndLeavesWhatIsDoneAlone() {
+        val lr = "Pictures/AdobeLightroom/"
+        val jpg = item("IMG20261117101010.jpg"); val dng = item("IMG20261117101020.dng")
+        val frame = item("IMG_20261117_101111.jpg", taken = 5); val export = item("IMG20261117101020.jpg", path = lr)
+        val finished = item("IMG20261116090000.jpg")
+        val all = listOf(jpg, dng, frame, export, finished)
+        val done = setOf("IMG20261116090000.jpg")
+        val before = Classifier.classify(all, emptyMap(), emptySet(), setOf(jpg.name, dng.name), done, lr)
+        // Een Galerij-bewerking en een Lightroom-export staan uit zichzelf aan, dus ook zij gaan mee.
+        assertEquals(setOf(jpg.name, dng.name, frame.name, export.name), before.filter { it.goesAlong }.map { it.item.name }.toSet())
+        // Wat KeeperPrefs.clearSelection doet: de bewaard-lijst leeg, en wat uit zichzelf aanstond op de uitzetlijst.
+        val exclude = before.filter { it.goesAlong && it.defaultsOn }.map { it.item.name }.toSet()
+        val after = Classifier.classify(all, emptyMap(), exclude, emptySet(), done, lr)
+        assertEquals(0, after.count { it.goesAlong })
+        assertEquals(Status.Done, after.first { it.item.id == finished.id }.status)
+        assertEquals(Status.Skipped, after.first { it.item.id == frame.id }.status)
+        // En ze zijn weer aan te zetten, zoals bij een nieuwe foto.
+        assertEquals(true, after.first { it.item.id == frame.id }.selectable)
+        assertEquals(true, after.first { it.item.id == jpg.id }.selectable)
+    }
 }

@@ -139,6 +139,8 @@ fun GalleryScreen(
     /** Er loopt al een run: de knop doet dan niets. */
     converting: Boolean,
     paused: Boolean,
+    /** Alles wat meegaat weer uitzetten, om opnieuw te beginnen. De galerij vraagt zelf eerst om een bevestiging. */
+    onClearSelection: () -> Unit,
     /** De tegels melden hier waar ze staan, voor de vlucht van de foto terug naar zijn tegel. */
     bounds: TileBounds = TileBounds(),
     /** De foto die nu groot open staat: zijn tegel blijft leeg (het gat waar hij naartoe terugvliegt) en de lijst scrolt ernaartoe. */
@@ -176,6 +178,10 @@ fun GalleryScreen(
     val (toReview, notKept) = remember(state.photos) {
         val reviewable = state.photos.filter { it.selectable && !it.defaultsOn }
         reviewable.count { !it.kept && !it.discarded } to reviewable.count { it.discarded }
+    }
+    var askClear by remember { mutableStateOf(false) }
+    if (askClear) {
+        ClearSelectionDialog(state.summary.goingCount, { askClear = false; onClearSelection() }, { askClear = false })
     }
     var askEdited by remember { mutableStateOf(false) }
     if (askEdited) {
@@ -248,6 +254,7 @@ fun GalleryScreen(
                     state, selecting, pickedPhotos, onOverview,
                     onConvert = onConvert, converting = converting, paused = paused,
                     onClear = ::endSelecting,
+                    onClearAll = { askClear = true },
                     // Zitten er originelen met een bewerkte versie bij, dan eerst vragen of Keeper die ook zelf mag exporteren.
                     onKeep = { if (pickedPhotos.any { it.askBeforeKeeping }) askEdited = true else { onKeep(pickedPhotos); endSelecting() } },
                     onReject = { onReject(pickedPhotos); endSelecting() },
@@ -257,6 +264,24 @@ fun GalleryScreen(
             }
         }
     }
+}
+
+/** Opnieuw beginnen: vraagt eerst om een bevestiging, want alle keuzes gaan in één keer weg. */
+@Composable
+private fun ClearSelectionDialog(count: Int, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    val resources = LocalContext.current.resources
+    KeeperDialog(
+        title = stringResource(R.string.gallery_clear_title),
+        onDismiss = onDismiss,
+        icon = KeeperIcons.Refresh,
+        iconTint = MaterialTheme.colorScheme.error,
+        body = resources.getQuantityString(R.plurals.gallery_clear_body, count, count),
+        closeLabel = stringResource(R.string.settings_back),
+        actions = {
+            SecondaryPillButton(stringResource(R.string.cleanup_cancel), onDismiss)
+            PrimaryPillButton(stringResource(R.string.gallery_clear_confirm), onConfirm, container = MaterialTheme.colorScheme.error, content = MaterialTheme.colorScheme.onError)
+        },
+    )
 }
 
 /** Wat Opruimen doet, in gewone woorden, met wat er blijft staan. Alleen de foto's van die ene dag. */
@@ -566,6 +591,7 @@ private fun BottomBar(
     converting: Boolean,
     paused: Boolean,
     onClear: () -> Unit,
+    onClearAll: () -> Unit,
     onKeep: () -> Unit,
     onReject: () -> Unit,
     onTrash: () -> Unit,
@@ -610,6 +636,10 @@ private fun BottomBar(
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
                             modifier = Modifier.bouncyClickable(onClick = onOverview),
                         )
+                    }
+                    // Opnieuw beginnen. Niet tijdens het omzetten: dan loopt er een run op de keuzes van dat moment.
+                    if (s.goingCount > 0 && !converting) {
+                        KeeperIconButton(KeeperIcons.Refresh, stringResource(R.string.gallery_clear), onClearAll, size = 44, iconSize = 20, background = MaterialTheme.colorScheme.surfaceContainerHighest)
                     }
                     PrimaryPillButton(stringResource(if (paused) R.string.gallery_continue else R.string.gallery_prepare), onConvert, enabled = s.goingCount > 0 && !converting)
                 }
