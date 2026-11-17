@@ -92,6 +92,16 @@ maakt de bewaard-lijst (`camera_version`) helemaal leeg en zet de Lightroom-expo
 al omgezette foto's blijven Done, en de knop is weg tijdens een run. Waarom Mark het miste: een foto die hij in de Galerij bewerkt (Hasselblad-omlijsting, `IMG_YYYYMMDD_HHMMSS.jpg`) telt als
 Galerij-bewerking en staat dus meteen aan, ook al heeft hij hem net pas gemaakt.
 
+Lokaal contrast in de lichten (2026-11-17): Mark vond de lichten van een omgezette foto vlak en minder fel dan in HDR, terwijl de schaduwen goed waren. Gemeten: de curve drukt de lichten samen, waardoor ze
+zo'n 38% lokaal contrast verliezen ten opzichte van de camera-SDR (std over 9 pixels in de lichtste 8%: camera 7,1, uitvoer 4,5). Twee ingrepen, beide alleen in de lichten. 1) `LocalContrast` geeft de HDR
+vóór de curve `Y' = Y * (Y/M)^(0,6 * w * g)` terug: M is het gauss-gemiddelde (sigma 0,5% van de lange kant) van het steekproefraster van de eerste pass, bilineair opgezocht per pixel (een strook heeft dus geen
+buren nodig); w alleen bij een lichte omgeving (M 0,5 tot 1,2), g alleen waar de gain map oplicht (opticht 10% tot 30%), dus de witte omlijsting en haar tekst blijven exact (255, tekst 0,2 code verschil).
+Vermenigvuldiger begrensd op 1/1,8 tot 1,8; de piek wordt daarna met dezelfde verhouding uit de steekproef verhoogd, anders valt 5% van de lucht op wit. 2) De knie van de uitvoer ligt een kwart van de ruimte
+tot wit hoger dan die waarop de belichting wordt gematcht (`ToneMapper.liftedKnee`, Normaal 0,45 naar 0,59): wat onder de knie zit blijft lineair, dus schaduwen en mids bewegen niet en de lichten worden helderder;
+het gemiddelde van de foto komt daardoor 3 tot 4% boven de camera uit, alleen in de lichten. Gemeten op de echte keten (emulator, 3 foto's van 17 november): lokaal contrast 4,5 naar 6,7 (camera 7,1) en 6,6 naar
+9,2 (camera 8,8), p95 +6,9 naar +6,9 en +6,4 naar +11,8, clip op wit 2,4 naar 1,4% en 0,3 naar 0,5%. Wat niet kan: de lichten zo fel als in HDR, want SDR houdt op bij 255 (de lichtste 8% staat al op 250 van 255).
+Referentie en cijfers voor de tests: `lc_*` en `lifted_knee` in `prototype/tonemap.py`; `ToneMapperTest` en `LocalContrastTest`.
+
 Model van de galerij: bewaard (vinkje) is wat meegaat naar de uitvoermap en blijft staan. Camera-JPG's en RAW's staan standaard
 **uit**, Lightroom-exports en Galerij-bewerkingen standaard **aan**. Opruimen (per dag) stuurt alleen niet-bewaarde camera-JPG's
 zonder hartje naar de prullenbak; RAW's, exports, bewerkingen en hun originelen blijven altijd staan.

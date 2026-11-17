@@ -69,6 +69,13 @@ class ToneMapperTest {
         assertEquals(1.0f, h3.peak(), 1e-6f) // ondergrens
     }
 
+    @Test fun `de piek van een steekproef komt uit hetzelfde histogram`() {
+        val luma = ToneMapper.LUMA_P3
+        val samples = FloatArray(3000) { if (it / 3 < 900) 0.3f else 1.7f }
+        assertEquals(1.7022785592256717f, LuminanceHistogram.peakOf(samples, 1000, luma), 2e-4f)
+        assertEquals(0f, LuminanceHistogram.peakOf(samples, 0, luma), 0f)
+    }
+
     // ---- belichting die de camera volgt ----
 
     private fun grayRamp(n: Int, scale: Float) = FloatArray(n * 3).also { a ->
@@ -86,20 +93,41 @@ class ToneMapperTest {
         val luma = ToneMapper.LUMA_P3
         val samples = grayRamp(2000, 1.0f)
         // Het doel ligt onder wat de vaste belichting 0,90 geeft: de belichting moet omlaag.
-        val fixed = meanOf(ToneMapper.of(nl.markmaaktmedia.keeper.scan.ToneMap.Normaal, 2.0f, luma), samples, luma)
+        val fixed = meanOf(ToneMapper(2.0f, 0.90f, 0.45f), samples, luma)
         val target = fixed * 0.8
         val m = ToneMapper.matching(nl.markmaaktmedia.keeper.scan.ToneMap.Normaal, 2.0f, luma, samples, 2000, target)
-        assertEquals(target, meanOf(m, samples, luma), target * 0.005)
+        // De belichting is gekozen op de knie van de sterkte; de teruggegeven mapper heeft een hogere knie (zie hieronder).
+        assertEquals(target, meanOf(ToneMapper(2.0f, m.exposure, 0.45f), samples, luma), target * 0.005)
+    }
+
+    @Test fun `de knie van de uitvoer ligt hoger, en onder de knie van de sterkte verandert er niets`() {
+        val luma = ToneMapper.LUMA_P3
+        val samples = grayRamp(500, 1.0f)
+        // Piek 4: bij een piek van 2 en de ondergrens van de belichting is de curve toevallig de identiteit en valt er niets te zien.
+        val m = ToneMapper.matching(nl.markmaaktmedia.keeper.scan.ToneMap.Normaal, 4.0f, luma, samples, 500, 0.3)
+        assertEquals(0.5875f, m.knee, 1e-6f)
+        assertEquals(0.7f, ToneMapper.liftedKnee(0.60f), 1e-6f)
+        assertEquals(0.55f, ToneMapper.liftedKnee(0.40f), 1e-6f)
+        val reference = ToneMapper(4.0f, m.exposure, 0.45f)
+        val a = FloatArray(3); val b = FloatArray(3)
+        // Schaduwen en mids (belicht onder de knie van de sterkte, 0,45) zijn identiek, de lichten zijn helderder.
+        val v = 0.44f / m.exposure
+        m.map(v, v, v, a, 0); reference.map(v, v, v, b, 0)
+        assertEquals(b[0], a[0], 1e-5f)
+        val hi = 1.2f
+        m.map(hi, hi, hi, a, 0); reference.map(hi, hi, hi, b, 0)
+        assert(a[0] > b[0] + 0.01f) { "licht ${a[0]} referentie ${b[0]}" }
     }
 
     @Test fun `een foto die al donkerder is dan de camera wordt niet verder opgehelderd`() {
         val luma = ToneMapper.LUMA_P3
         val samples = grayRamp(500, 0.5f)
         val m = ToneMapper.matching(nl.markmaaktmedia.keeper.scan.ToneMap.Normaal, 2.0f, luma, samples, 500, 10.0)
+        // Normaal 0,90 met de verhoogde knie 0,5875 (prototype/tonemap.py: tonemap(hdr, 2.0, 0.90, lifted_knee(0.45), 0.5)).
         check(m, arrayOf(
-            floatArrayOf(0.45f, 0.45f, 0.45f), floatArrayOf(0f, 0f, 0f), floatArrayOf(1.0f, 0.73981f, 0.536382f), floatArrayOf(1f, 1f, 1f),
-            floatArrayOf(0.247337f, 0.527494f, 0.94205f), floatArrayOf(0.899736f, 0.101879f, 0.101879f),
-            floatArrayOf(0.750564f, 0.359979f, 0.269985f), floatArrayOf(0.045f, 0.018f, 0.027f),
+            floatArrayOf(0.45f, 0.45f, 0.45f), floatArrayOf(0f, 0f, 0f), floatArrayOf(1f, 0.791829f, 0.577074f), floatArrayOf(1f, 1f, 1f),
+            floatArrayOf(0.25222f, 0.536153f, 0.956228f), floatArrayOf(0.921501f, 0.101879f, 0.101879f),
+            floatArrayOf(0.77553f, 0.36f, 0.27f), floatArrayOf(0.045f, 0.018f, 0.027f),
         ))
     }
 
@@ -175,7 +203,9 @@ class ToneMapperTest {
         assert(b[0] <= a[0]) { "met anker ${b[0]} zonder ${a[0]}" }
         val out = FloatArray(3)
         var sum = 0.0
-        for (i in 0 until n) { with.map(hdr[i * 3], hdr[i * 3 + 1], hdr[i * 3 + 2], sdr[i * 3], sdr[i * 3 + 1], sdr[i * 3 + 2], out, 0); sum += luma[0] * out[0] + luma[1] * out[1] + luma[2] * out[2] }
+        // Het gemiddelde klopt op de knie van de sterkte, waarop de belichting gekozen is.
+        val reference = ToneMapper(2.0f, with.exposure, 0.45f)
+        for (i in 0 until n) { reference.map(hdr[i * 3], hdr[i * 3 + 1], hdr[i * 3 + 2], sdr[i * 3], sdr[i * 3 + 1], sdr[i * 3 + 2], out, 0); sum += luma[0] * out[0] + luma[1] * out[1] + luma[2] * out[2] }
         assert(sum / n <= target * 1.005) { "gemiddelde ${sum / n} doel $target" }
     }
 }

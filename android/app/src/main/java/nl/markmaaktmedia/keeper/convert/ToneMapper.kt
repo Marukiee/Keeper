@@ -14,8 +14,8 @@ import kotlin.math.min
  */
 class ToneMapper(
     peak: Float,
-    private val exposure: Float,
-    private val knee: Float,
+    val exposure: Float,
+    val knee: Float,
     private val mix: Float = 0.5f,
     private val luma: FloatArray = LUMA_P3,
 ) {
@@ -116,9 +116,19 @@ class ToneMapper(
         val LUMA_P3 = floatArrayOf(0.2289746f, 0.6917385f, 0.0792869f)
         val LUMA_SRGB = floatArrayOf(0.2126f, 0.7152f, 0.0722f)
 
+        /**
+         * De knie van de uitvoer ligt een kwart van de resterende ruimte tot wit hoger dan die van de sterkte (Normaal 0,45 wordt 0,59): wat onder de
+         * knie zit blijft lineair, dus een hogere knie maakt de lichten helderder zonder dat schaduwen en mids bewegen. De belichting wordt wel op de
+         * knie van de sterkte zelf gekozen (zie [matching]); de foto komt daardoor gemiddeld zo'n 3 tot 4% lichter uit dan de camera-SDR, alleen in
+         * de lichten. Zie `lifted_knee` in `prototype/tonemap.py`.
+         */
+        const val KNEE_LIFT = 0.25f
+
+        fun liftedKnee(knee: Float) = knee + KNEE_LIFT * (1f - knee)
+
         /** Mix is overal 0,5; belichting en knie per sterkte staan in [nl.markmaaktmedia.keeper.scan.ToneMap]. */
         fun of(t: nl.markmaaktmedia.keeper.scan.ToneMap, peak: Float, luma: FloatArray) =
-            ToneMapper(peak, t.exposure.toFloat(), t.knee.toFloat(), 0.5f, luma)
+            ToneMapper(peak, t.exposure.toFloat(), liftedKnee(t.knee.toFloat()), 0.5f, luma)
 
         /** Zo donker mag de belichting hooguit worden gezet om de foto op de helderheid van de camera te brengen. */
         const val MIN_EXPOSURE = 0.5f
@@ -127,7 +137,8 @@ class ToneMapper(
          * Dezelfde tone map, maar met de belichting zo gekozen dat de gemiddelde helderheid van het resultaat gelijk is aan die van de
          * SDR-versie die de camera zelf maakte ([targetMean], lineaire luminantie). Zonder dit komt de HDR-weergave (de gain map tilt de
          * midden- en schaduwtonen op) gemiddeld zo'n 30% lichter uit dan de camera-SDR, met opgetilde zwarten en bleke huid. De belichting
-         * van de sterkte is het maximum: een foto die al donkerder is dan de camera-SDR wordt niet verder opgehelderd.
+         * van de sterkte is het maximum: een foto die al donkerder is dan de camera-SDR wordt niet verder opgehelderd. De belichting wordt op
+         * de knie van de sterkte gekozen; de teruggegeven mapper heeft die knie [liftedKnee] hoger (lichten helderder, de rest gelijk).
          *
          * [samples] zijn lineaire HDR-pixels (r, g, b achter elkaar, [count] stuks) uit de eerste pass. [sdrSamples] zijn dezelfde pixels
          * in de SDR van de camera; met die erbij telt het anker (zie [map] met SDR) mee in het gemiddelde, zoals het in de uitvoer meetelt.
@@ -152,12 +163,12 @@ class ToneMapper(
             // Het resultaat wordt lichter met de belichting, dus bisectie op de grootste belichting die niet boven het doel uitkomt.
             var lo = MIN_EXPOSURE
             var hi = cap
-            if (meanAt(hi) <= targetMean) return ToneMapper(peak, hi, t.knee.toFloat(), 0.5f, luma)
+            if (meanAt(hi) <= targetMean) return ToneMapper(peak, hi, liftedKnee(t.knee.toFloat()), 0.5f, luma)
             repeat(14) {
                 val mid = (lo + hi) / 2
                 if (meanAt(mid) > targetMean) hi = mid else lo = mid
             }
-            return ToneMapper(peak, lo, t.knee.toFloat(), 0.5f, luma)
+            return ToneMapper(peak, lo, liftedKnee(t.knee.toFloat()), 0.5f, luma)
         }
     }
 }
@@ -201,5 +212,15 @@ class LuminanceHistogram {
         return edges[min(idx, BINS - 1) + 1].toFloat().coerceIn(lo, hi)
     }
 
-    private companion object { const val BINS = 2000 }
+    companion object {
+        private const val BINS = 2000
+
+        /** Het 99,95e percentiel van de luminantie van een steekproef (r, g, b achter elkaar), zonder de grenzen van [peak]; 0 als er niets is. */
+        fun peakOf(samples: FloatArray, count: Int, luma: FloatArray): Float {
+            if (count == 0) return 0f
+            val h = LuminanceHistogram()
+            for (i in 0 until count) h.add(luma[0] * samples[i * 3] + luma[1] * samples[i * 3 + 1] + luma[2] * samples[i * 3 + 2])
+            return h.peak(lo = 1e-3f, hi = 8f)
+        }
+    }
 }

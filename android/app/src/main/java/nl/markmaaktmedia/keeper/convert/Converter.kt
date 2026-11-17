@@ -55,11 +55,21 @@ class Converter(private val stripRows: Int = 256, private val log: (String) -> U
         // Eerste pass: de piek van de inhoud, op een verkleind beeld.
         val sample = when { w.toLong() * h >= 40_000_000L -> 4; w.toLong() * h >= 8_000_000L -> 2; else -> 1 }
         val first = measure(source, layout, gain, sample, onProgress, cancelled)
-        val peak = first.peak
+        var peak = first.peak
         val space = first.space
         log("piek $peak, kleurruimte $space, ${(System.nanoTime() - t0) / 1_000_000} ms")
 
         val luma = if (space.contains("P3", ignoreCase = true)) ToneMapper.LUMA_P3 else ToneMapper.LUMA_SRGB
+        // Lokaal contrast in de lichten komt er eerst bij (zie LocalContrast); de belichting wordt gekozen op wat er daarna uitkomt.
+        val contrast = LocalContrast.build(first.samples, first.sampleCount, first.gridW, first.gridH, sample, w, h, luma)
+        if (contrast != null) {
+            // Het lokale contrast tilt de lichten op, dus de piek van wat er door de curve gaat ligt hoger dan die van de HDR zelf.
+            // De verhouding komt uit de steekproef (zelfde percentiel voor en na), de piek zelf blijft die van de hele foto.
+            val before = LuminanceHistogram.peakOf(first.samples, first.sampleCount, luma)
+            contrast.adjustSamples(first.samples, first.sdrSamples, first.sampleCount)
+            val after = LuminanceHistogram.peakOf(first.samples, first.sampleCount, luma)
+            if (before > 0f && after > before) peak = (peak * after / before).coerceIn(1.0f, 4.93f)
+        }
         // De belichting volgt de camera: de foto komt even helder uit als de SDR-versie die de camera zelf maakte (zie ToneMapper.matching).
         val mapper = ToneMapper.matching(settings.toneMap, peak, luma, first.samples, first.sampleCount, first.baseMean, first.sdrSamples)
         val sampler = GainMapSampler(layout.meta, gain, w, h)
@@ -116,7 +126,7 @@ class Converter(private val stripRows: Int = 256, private val log: (String) -> U
                 val tasks = (0 until workers).mapNotNull { i ->
                     val r0 = i * chunk
                     val r1 = minOf(r0 + chunk, rows)
-                    if (r0 >= r1) null else pool.submit { pixels(raw, rowBytes, y0, r0, r1, w, sampler, mapper, scratches[i], buf) }
+                    if (r0 >= r1) null else pool.submit { pixels(raw, rowBytes, y0, r0, r1, w, sampler, mapper, contrast, scratches[i], buf) }
                 }
                 tasks.forEach { it.await() }
                 tPixels += System.nanoTime() - t
@@ -142,16 +152,16 @@ class Converter(private val stripRows: Int = 256, private val log: (String) -> U
         return ConvertResult(w, h, peak, "${gain.width}x${gain.height}x${gain.channels}", space, ms)
     }
 
-    private companion object { const val SAMPLE_STEP = 4 }
+    private companion object { const val SAMPLE_STEP = LocalContrast.GRID_STEP }
 
     private fun <T> Future<T>.await(): T = try { get() } catch (e: java.util.concurrent.ExecutionException) { throw e.cause ?: e }
 
     private class Scratch(width: Int, val gain: FloatArray) { val sdr = FloatArray(width * 3); val hdr = FloatArray(width * 3) }
 
-    /** Rijen [r0, r1) van een strook: SDR uit de bytes, HDR via de gain map, tone map (met de SDR als anker), naar 8-bit sRGB in [out]. */
+    /** Rijen [r0, r1) van een strook: SDR uit de bytes, HDR via de gain map, lokaal contrast, tone map (met de SDR als anker), naar 8-bit sRGB in [out]. */
     private fun pixels(
         raw: ByteArray, rowBytes: Int, stripY: Int, r0: Int, r1: Int, w: Int,
-        sampler: GainMapSampler, mapper: ToneMapper, s: Scratch, out: ByteArray,
+        sampler: GainMapSampler, mapper: ToneMapper, contrast: LocalContrast?, s: Scratch, out: ByteArray,
     ) {
         val px = s.hdr
         val base = s.sdr
@@ -164,6 +174,7 @@ class Converter(private val stripRows: Int = 256, private val log: (String) -> U
                 p += 4
             }
             sampler.hdrRow(stripY + r, base, px, s.gain)
+            contrast?.adjustRow(stripY + r, px, base)
             var o = r * w * 3
             for (x in 0 until w) {
                 mapper.map(px[x * 3], px[x * 3 + 1], px[x * 3 + 2], base[x * 3], base[x * 3 + 1], base[x * 3 + 2], px, x * 3)
@@ -226,7 +237,10 @@ class Converter(private val stripRows: Int = 256, private val log: (String) -> U
      * Wat de eerste pass over het verkleinde beeld oplevert: de piek, de kleurruimte, en een steekproef van de lineaire HDR-pixels met de
      * gemiddelde luminantie van dezelfde pixels in de SDR-versie van de camera (de basis, voor de gain map erop komt).
      */
-    private class Measured(val peak: Float, val space: String, val samples: FloatArray, val sdrSamples: FloatArray, val sampleCount: Int, val baseMean: Double)
+    private class Measured(
+        val peak: Float, val space: String, val samples: FloatArray, val sdrSamples: FloatArray, val sampleCount: Int, val baseMean: Double,
+        val gridW: Int, val gridH: Int,
+    )
 
     /** Piek uit het 99,95e percentiel van de luminantie van de gereconstrueerde HDR, op een verkleind beeld. */
     private fun measure(
@@ -273,6 +287,9 @@ class Converter(private val stripRows: Int = 256, private val log: (String) -> U
                 sampleCount++
             }
         }
-        return Measured(hist.peak(), space, samples, sdrSamples, sampleCount, if (sampleCount > 0) baseSum / sampleCount else 0.0)
+        return Measured(
+            hist.peak(), space, samples, sdrSamples, sampleCount, if (sampleCount > 0) baseSum / sampleCount else 0.0,
+            (bw + SAMPLE_STEP - 1) / SAMPLE_STEP, (bh + SAMPLE_STEP - 1) / SAMPLE_STEP,
+        )
     }
 }

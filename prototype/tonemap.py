@@ -84,3 +84,53 @@ def tonemap_anchored(hdr, sdr, peak, k=0.95, knee=0.70, mix=1.0):
     """Als [tonemap], met de SDR van de camera als anker voor lichte pixels zonder opticht."""
     a = anchor_weight(hdr, sdr)[..., None]
     return tonemap(hdr, peak, k, knee, mix) * (1.0 - a) + sdr * a
+
+
+# ---- lokaal contrast in de lichten (2026-11-17) ----
+# De curve drukt de lichten samen, dus ze verliezen ten opzichte van de camera-SDR zo'n 38% lokaal contrast (plat). Daarom krijgt de HDR vóór de
+# curve een lokaal contrast terug: Y' = Y * (Y / M)^(alfa * w * g), met M het wazige gemiddelde van de omgeving (gauss, sigma = 0,5% van de
+# lange kant, gemeten op het steekproefraster van de eerste pass), w = 0 onder M 0,5 en 1 boven 1,2 (alleen lichte omgeving) en g = 0 onder een
+# opticht van 10% en 1 boven 30% (alleen waar de gain map oplicht: witte omlijsting en tekst hebben geen gain en blijven dus zoals ze zijn).
+LC_ALPHA = 0.6
+LC_SIGMA_FRAC = 0.005
+LC_M0, LC_M1 = 0.5, 1.2
+LC_R0, LC_R1 = 1.10, 1.30
+LC_SMAX = 1.8
+LC_GRID_STEP = 4  # het raster is elke vierde pixel van elke vierde rij van het verkleinde beeld
+KNEE_LIFT = 0.25  # de knie van de uitvoer ligt dit deel van de resterende ruimte hoger dan waarmee de belichting wordt gematcht: lichten helderder, schaduwen en mids ongemoeid
+
+
+def lifted_knee(knee):
+    return knee + KNEE_LIFT * (1.0 - knee)
+
+
+def lc_factor(yh, ys, m):
+    """Vermenigvuldiger voor de HDR-pixel met luminantie [yh], camera-SDR [ys] en omgevingsgemiddelde [m] (allemaal lineair)."""
+    ratio = yh / np.maximum(ys, 1e-4)
+    g = _smooth(LC_R0, LC_R1, ratio)
+    w = _smooth(LC_M0, LC_M1, m)
+    e = LC_ALPHA * w * g
+    return np.clip(np.power(np.maximum(yh, 1e-4) / np.maximum(m, 1e-4), e), 1.0 / LC_SMAX, LC_SMAX)
+
+
+def lc_mean_grid(luma_grid, sigma_cells):
+    """Wazig gemiddelde van het raster: gauss, straal int(3 sigma + 0,5), randen herhaald (scipy mode 'nearest')."""
+    from scipy.ndimage import gaussian_filter
+    return gaussian_filter(luma_grid.astype(np.float64), sigma_cells, mode="nearest", truncate=3.0).astype(np.float32)
+
+
+def lc_grid_coord(x, sample):
+    """Rasterpositie (in cellen) van het midden van volle-resolutiepixel x; raster is elke vierde pixel van het beeld verkleind met [sample]."""
+    return ((x + 0.5) / sample - 0.5) / LC_GRID_STEP
+
+
+def lc_lookup(mean_grid, x, y, sample):
+    """Bilineair omgevingsgemiddelde voor volle-resolutiepixels x (rij-vector) en y (kolom-vector)."""
+    gh, gw = mean_grid.shape
+    gx = np.clip(lc_grid_coord(np.asarray(x, np.float64), sample), 0, gw - 1)
+    gy = np.clip(lc_grid_coord(np.asarray(y, np.float64), sample), 0, gh - 1)
+    x0 = np.floor(gx).astype(int); x1 = np.minimum(x0 + 1, gw - 1); fx = gx - x0
+    y0 = np.floor(gy).astype(int); y1 = np.minimum(y0 + 1, gh - 1); fy = gy - y0
+    top = mean_grid[y0][:, x0] * (1 - fx) + mean_grid[y0][:, x1] * fx
+    bot = mean_grid[y1][:, x0] * (1 - fx) + mean_grid[y1][:, x1] * fx
+    return top * (1 - fy)[:, None] + bot * fy[:, None]
