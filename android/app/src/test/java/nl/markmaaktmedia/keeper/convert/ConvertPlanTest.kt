@@ -25,6 +25,37 @@ class ConvertPlanTest {
         assertEquals("edit-lr.png", OutputName.of(item("edit.png", path = lightroom, mime = "image/png"), lightroom))
     }
 
+    @Test fun aNewVersionGetsTheNextFreeName() {
+        assertEquals("IMG1.jpg", OutputName.versioned("IMG1.jpg", emptySet()))
+        assertEquals("IMG1-2.jpg", OutputName.versioned("IMG1.jpg", setOf("img1.jpg")))
+        assertEquals("IMG1-3.jpg", OutputName.versioned("IMG1.jpg", setOf("img1.jpg", "img1-2.jpg")))
+        assertEquals("edit-lr-2.png", OutputName.versioned("edit-lr.png", setOf("edit-lr.png")))
+        assertEquals("noext-2", OutputName.versioned("noext", setOf("noext")))
+    }
+
+    @Test fun withoutNewVersionAPhotoThatIsAlreadyThereIsSkipped() {
+        val a = photo(item("IMG1.jpg"), Status.Convert, hdr = true)
+        val plan = ConvertPlan.of(listOf(a), lightroom, setOf("IMG1.jpg"))
+        assertTrue(plan.steps.isEmpty())
+        assertEquals(1, plan.existing.size)
+    }
+
+    @Test fun aNewVersionIsWrittenNextToTheFirstOne() {
+        val a = photo(item("IMG1.jpg"), Status.Convert, hdr = true)
+        val plan = ConvertPlan.of(listOf(a), lightroom, setOf("IMG1.jpg"), newVersion = true)
+        assertEquals(listOf("IMG1-2.jpg"), plan.steps.map { it.outName })
+        assertEquals(How.Convert, plan.steps.single().how)
+        assertTrue(plan.existing.isEmpty() && plan.clashes.isEmpty())
+        // En nog een keer, als de tweede er ook al staat.
+        val again = ConvertPlan.of(listOf(a), lightroom, setOf("IMG1.jpg", "img1-2.jpg"), newVersion = true)
+        assertEquals(listOf("IMG1-3.jpg"), again.steps.map { it.outName })
+    }
+
+    @Test fun aNewVersionOfAFreshPhotoKeepsTheNormalName() {
+        val a = photo(item("IMG2.jpg"), Status.Convert, hdr = true)
+        assertEquals(listOf("IMG2.jpg"), ConvertPlan.of(listOf(a), lightroom, setOf("IMG1.jpg"), newVersion = true).steps.map { it.outName })
+    }
+
     @Test fun rawAndItsLightroomExportBothGoAlongUnderDifferentNames() {
         val raw = photo(item("IMG1.dng"), Status.CameraVersion)
         val export = photo(item("IMG1.jpg", path = lightroom), Status.LightroomExport)

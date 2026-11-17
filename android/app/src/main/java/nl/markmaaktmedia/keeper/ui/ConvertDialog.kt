@@ -120,6 +120,8 @@ private fun reportText(report: ConvertReport, outputFolder: String): String {
     if (report.converted > 0) lines += stringResource(R.string.convert_result_converted, report.converted)
     if (report.copied > 0) lines += stringResource(R.string.convert_result_copied, report.copied)
     if (report.skipped > 0) lines += stringResource(R.string.convert_result_skipped, report.skipped)
+    // Bij een of twee foto's (alleen deze omzetten): onder welke naam ze staan, want een nieuwe versie heet anders dan de eerste.
+    if (report.written.size in 1..2) report.written.forEach { lines += stringResource(R.string.convert_result_named, it) }
     if (report.done > 0) {
         if (report.bytesIn > 0) lines += stringResource(R.string.convert_result_size, formatBytes(report.bytesIn), formatBytes(report.bytesOut))
         lines += stringResource(R.string.convert_result_folder, outputFolder.trimEnd('/'))

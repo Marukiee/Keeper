@@ -113,6 +113,9 @@
     <string name="viewer_kept">Kept</string>
     <string name="viewer_discard">Don\'t keep</string>
     <string name="viewer_discarded">Not kept</string>
+    <string name="viewer_more">More</string>
+    <string name="viewer_convert_one">Convert only this photo</string>
+    <string name="viewer_convert_again">Make a new version</string>
     <string name="tile_kept">Kept</string>
     <string name="tile_discarded">Not kept</string>
 
@@ -213,6 +216,7 @@
     <string name="convert_result_skipped">%1$d were already in the folder</string>
     <string name="convert_result_size">%1$s became %2$s</string>
     <string name="convert_result_folder">In %1$s</string>
+    <string name="convert_result_named">Saved as %1$s</string>
     <string name="convert_failures_title">These did not work</string>
     <string name="convert_failures_more">and %1$d more</string>
     <string name="convert_close">OK</string>

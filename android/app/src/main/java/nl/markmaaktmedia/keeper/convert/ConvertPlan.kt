@@ -24,14 +24,17 @@ class Plan(val steps: List<Step>, val existing: List<Photo>, val clashes: List<P
 
 /** Zuivere planning van een run: welke foto's, onder welke naam en hoe. Geen Android, dus op de JVM te testen. */
 object ConvertPlan {
-    fun of(photos: List<Photo>, lightroomFolder: String, existingNames: Set<String>): Plan {
+    /**
+     * @param newVersion een nieuwe versie maken naast wat er al staat (zie [OutputName.versioned]) in plaats van de foto over te slaan.
+     */
+    fun of(photos: List<Photo>, lightroomFolder: String, existingNames: Set<String>, newVersion: Boolean = false): Plan {
         val have = existingNames.map { it.lowercase() }.toSet()
         val used = HashSet<String>()
         val steps = ArrayList<Step>()
         val existing = ArrayList<Photo>()
         val clashes = ArrayList<Photo>()
         for (photo in photos.filter { it.goesAlong }.sortedBy { it.takenMs }) {
-            val name = OutputName.of(photo.item, lightroomFolder)
+            val name = OutputName.of(photo.item, lightroomFolder).let { if (newVersion) OutputName.versioned(it, have + used) else it }
             val key = name.lowercase()
             when {
                 key in have -> existing += photo

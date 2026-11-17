@@ -111,6 +111,9 @@
     <string name="viewer_kept">Bewaard</string>
     <string name="viewer_discard">Niet bewaren</string>
     <string name="viewer_discarded">Niet bewaard</string>
+    <string name="viewer_more">Meer</string>
+    <string name="viewer_convert_one">Alleen deze foto omzetten</string>
+    <string name="viewer_convert_again">Nieuwe versie maken</string>
     <string name="tile_kept">Bewaard</string>
     <string name="tile_discarded">Niet bewaard</string>
 
@@ -211,6 +214,7 @@
     <string name="convert_result_skipped">%1$d stonden er al in de map</string>
     <string name="convert_result_size">%1$s werd %2$s</string>
     <string name="convert_result_folder">In %1$s</string>
+    <string name="convert_result_named">Opgeslagen als %1$s</string>
     <string name="convert_failures_title">Dit lukte niet</string>
     <string name="convert_failures_more">en nog %1$d</string>
     <string name="convert_close">OK</string>

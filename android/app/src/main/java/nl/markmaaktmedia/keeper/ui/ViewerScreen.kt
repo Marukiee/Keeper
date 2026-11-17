@@ -51,6 +51,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -138,6 +140,10 @@ fun ViewerScreen(
     bounds: TileBounds = TileBounds(),
     /** De foto die nu in beeld is, zodat de galerij zijn tegel leeg kan laten en er naartoe kan scrollen. */
     onCurrent: (Long) -> Unit = {},
+    /** Alleen deze foto omzetten, zonder hem te bewaren; staat er al een versie, dan komt er een nieuwe naast. */
+    onConvertOne: (Photo) -> Unit = {},
+    /** Er loopt al een run: dan kan er geen tweede bij. */
+    converting: Boolean = false,
 ) {
     val byId = remember(photos) { photos.associateBy { it.item.id } }
     val list = ids.mapNotNull { byId[it] }
@@ -181,6 +187,7 @@ fun ViewerScreen(
     LaunchedEffect(current.item.id) { if (!opening) onCurrent(current.item.id) }
     val scanner = context.graph.scanner
     var askEdited by remember { mutableStateOf(false) }
+    var menuOpen by remember { mutableStateOf(false) }
     // Bewaren en niet bewaren gaan door naar de volgende foto. De laatste blijft staan.
     fun next() { if (pager.currentPage < list.lastIndex) scope.launch { pager.animateScrollToPage(pager.currentPage + 1) } }
     LaunchedEffect(Unit) {
@@ -274,6 +281,19 @@ fun ViewerScreen(
             ) {
                 Icon(KeeperIcons.OpenInNew, null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(18.dp))
                 Text(stringResource(R.string.review_lightroom), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, softWrap = false)
+            }
+            // Het menu staat er altijd, ook bij een foto die al klaar is: daar maakt "nieuwe versie maken" een tweede naast de eerste.
+            Box {
+                KeeperIconButton(KeeperIcons.More, stringResource(R.string.viewer_more), { menuOpen = true })
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    val asked = current
+                    DropdownMenuItem(
+                        text = { Text(stringResource(if (asked.status == Status.Done) R.string.viewer_convert_again else R.string.viewer_convert_one)) },
+                        // Alleen wat HDR-naar-SDR kan: een JPG met gain map of de camera-versie van een RAW.
+                        enabled = !converting && (asked.hdr || asked.item.isDng),
+                        onClick = { menuOpen = false; onConvertOne(asked) },
+                    )
+                }
             }
         }
         // De vaste omlijsting vangt het gebaar op (in de Initial-ronde, vóór de pager); de pager erbinnen krijgt de verplaatsing.

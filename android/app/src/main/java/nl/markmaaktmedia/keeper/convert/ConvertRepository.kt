@@ -36,11 +36,13 @@ class ConvertRepository(private val context: Context, private val prefs: KeeperP
 
     private var running: Job? = null
     @Volatile private var stop = false
+    private var options = ConvertOptions()
 
-    /** Start een run, vanuit het scherm. Doet niets als er al een loopt. */
-    fun start() {
+    /** Start een run, vanuit het scherm. Doet niets als er al een loopt. Met [options] voor één foto: zie [ConvertOptions]. */
+    fun start(options: ConvertOptions = ConvertOptions()) {
         synchronized(this) {
             if (_state.value is ConvertState.Running) return
+            this.options = options
             stop = false
             _state.value = ConvertState.Running()
         }
@@ -54,7 +56,7 @@ class ConvertRepository(private val context: Context, private val prefs: KeeperP
             if (running?.isActive == true) return
             running = scope.launch {
                 val report = try {
-                    job.run({ p -> _state.value = ConvertState.Running(p.index, p.total, p.name, p.fraction, p.item, p.how, p.alreadyDone, stop) }, { stop })
+                    job.run({ p -> _state.value = ConvertState.Running(p.index, p.total, p.name, p.fraction, p.item, p.how, p.alreadyDone, stop) }, { stop }, options)
                 } catch (e: kotlinx.coroutines.CancellationException) {
                     throw e
                 } catch (t: Throwable) {

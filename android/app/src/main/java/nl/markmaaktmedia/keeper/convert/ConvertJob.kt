@@ -25,8 +25,11 @@ import kotlin.coroutines.coroutineContext
  * Alleen voor de debug-ontvanger (zie `ConvertDebugReceiver`), zodat de hele keten op de telefoon te testen is zonder de selectie van Mark
  * naar de echte uitvoermap te sturen: [only] beperkt de run tot die MediaStore-ids (ze tellen dan als bewaard), [folder] vervangt de
  * uitvoermap. [readOriginal] uit leest zonder `setRequireOriginal`, voor als de locatie-toestemming ontbreekt; de uitvoer heeft dan geen GPS.
+ *
+ * Ook voor "alleen deze foto omzetten" in de viewer: [only] zet die ene foto om zonder dat hij bewaard hoeft te zijn of te worden, en met
+ * [newVersion] komt er een tweede versie naast als de eerste al in de uitvoermap staat (naam met `-2`), zodat ze te vergelijken zijn.
  */
-class ConvertOptions(val only: Set<Long>? = null, val folder: String? = null, val readOriginal: Boolean = true)
+class ConvertOptions(val only: Set<Long>? = null, val folder: String? = null, val readOriginal: Boolean = true, val newVersion: Boolean = false)
 
 /** Waar de run mee bezig is. [index] telt vanaf 1; [fraction] is hoever die ene foto is (0 tot 1). [item] en [how] zijn voor het scherm: welke foto, en wat ermee gebeurt. */
 data class ConvertProgress(val index: Int, val total: Int, val name: String, val fraction: Float, val item: MediaItem? = null, val how: How? = null, val alreadyDone: Int = 0)
@@ -47,6 +50,8 @@ class ConvertReport(
     val bytesIn: Long = 0,
     val bytesOut: Long = 0,
     val problem: Problem? = null,
+    /** Hoe de nieuwe bestanden heten (voor het verslag). */
+    val written: List<String> = emptyList(),
 ) {
     enum class Problem { NoLocationAccess }
     val done get() = converted + copied
@@ -78,13 +83,18 @@ class ConvertJob(private val context: Context, private val prefs: KeeperPrefs, p
         val snapshot = scanner.scan()
         val only = options.only
         // Een test telt zijn foto's als bewaard, zonder iets in de instellingen te veranderen.
-        val kept = prefs.cameraVersion.first() + if (only == null) emptySet() else snapshot.items.filter { it.id in only }.map { it.name }
+        val onlyNames = if (only == null) emptySet() else snapshot.items.filter { it.id in only }.map { it.name }.toSet()
+        val kept = prefs.cameraVersion.first() + onlyNames
+        // Een foto die Mark zelf uitzette telt voor "alleen deze" toch mee: dat is wat hij nu vraagt.
+        val skippedNames = prefs.skipped.first() - onlyNames
         // In een testmap zegt wat er in de echte uitvoermap staat niets.
-        val done = if (options.folder == null) snapshot.doneNames else emptySet()
-        val photos = Classifier.classify(snapshot.items, snapshot.probes, prefs.skipped.first(), kept, done, snapshot.lightroomFolder, prefs.rejected.first())
+        val existing = if (options.folder == null) snapshot.doneNames else emptySet()
+        // Een nieuwe versie begint bij een foto die al klaar is: voor de indeling telt dat niet, voor de namen wel.
+        val done = if (options.newVersion) emptySet() else existing
+        val photos = Classifier.classify(snapshot.items, snapshot.probes, skippedNames, kept, done, snapshot.lightroomFolder, prefs.rejected.first())
             .filter { only == null || it.item.id in only }
         val folder = OutputStore.folder(options.folder ?: prefs.outputFolder.first())
-        val plan = ConvertPlan.of(photos, snapshot.lightroomFolder, done)
+        val plan = ConvertPlan.of(photos, snapshot.lightroomFolder, existing, options.newVersion)
         val settings = ConvertSettings(
             // Het gekozen "q94" is jpegli; onze encoder is libjpeg en geeft bij twee lager dezelfde grootte en kwaliteit (gemeten in fase 2).
             jpegQuality = (prefs.quality.first() - 2).coerceIn(50, 98),
@@ -96,6 +106,7 @@ class ConvertJob(private val context: Context, private val prefs: KeeperPrefs, p
 
         var converted = 0
         var copied = 0
+        val written = ArrayList<String>()
         // Wat al in de uitvoermap staat, is eerder gedaan en blijft met rust; wat Mark daaruit verwijderd heeft, is hier geen Klaar meer en komt dus weer aan de beurt.
         val alreadyDone = photos.count { it.status == Status.Done }
         var skipped = plan.existing.size + alreadyDone
@@ -115,6 +126,7 @@ class ConvertJob(private val context: Context, private val prefs: KeeperPrefs, p
                 if (step.how == How.Copy || result.copiedAsIs) copied++ else converted++
                 bytesIn += result.bytesIn
                 bytesOut += result.bytesOut
+                written += step.outName
             } catch (_: AlreadyThere) {
                 skipped++
             } catch (e: CancellationException) {
@@ -128,7 +140,7 @@ class ConvertJob(private val context: Context, private val prefs: KeeperPrefs, p
             }
         }
         work.deleteRecursively()
-        ConvertReport(converted, copied, skipped, failures, stopped, left, bytesIn, bytesOut)
+        ConvertReport(converted, copied, skipped, failures, stopped, left, bytesIn, bytesOut, written = written)
     }
 
     /** De naam stond er net al (een andere run of app was sneller): overslaan, geen fout. */

@@ -102,6 +102,12 @@ het gemiddelde van de foto komt daardoor 3 tot 4% boven de camera uit, alleen in
 9,2 (camera 8,8), p95 +6,9 naar +6,9 en +6,4 naar +11,8, clip op wit 2,4 naar 1,4% en 0,3 naar 0,5%. Wat niet kan: de lichten zo fel als in HDR, want SDR houdt op bij 255 (de lichtste 8% staat al op 250 van 255).
 Referentie en cijfers voor de tests: `lc_*` en `lifted_knee` in `prototype/tonemap.py`; `ToneMapperTest` en `LocalContrastTest`.
 
+Alleen deze foto omzetten (2026-11-17): in de viewer staat rechtsboven een drie-puntjesmenu (`KeeperIcons.More`), altijd zichtbaar, ook bij een foto die al Klaar is. Het item heet "Alleen deze foto omzetten", bij Klaar
+"Nieuwe versie maken", en is uit voor wat geen HDR-JPG of RAW is of als er al een run loopt. Het start via dezelfde service en melding als Omzetten met `ConvertOptions(only = {id}, newVersion = true)`: de foto telt voor deze run als
+bewaard, ook als Mark hem zelf had uitgezet (`skipped` min die naam), maar niets wordt in de instellingen veranderd, dus de selectie blijft zoals ze was. `ConvertPlan.of(..., newVersion = true)` kiest de eerste vrije naam via
+`OutputName.versioned` (`IMG1.jpg`, dan `IMG1-2.jpg`, `IMG1-3.jpg`); Klaar blijft op de eerste naam kijken, dus een nieuwe versie verandert niets aan de indeling. Een nieuwe versie staat in dezelfde (naar Immich gesynchroniseerde) map
+als de eerste; het verslag noemt de naam (`ConvertReport.written`). Voor vergelijken van oud en nieuw: omzetten, dan staan `naam.jpg` en `naam-2.jpg` naast elkaar met dezelfde opnametijd.
+
 Model van de galerij: bewaard (vinkje) is wat meegaat naar de uitvoermap en blijft staan. Camera-JPG's en RAW's staan standaard
 **uit**, Lightroom-exports en Galerij-bewerkingen standaard **aan**. Opruimen (per dag) stuurt alleen niet-bewaarde camera-JPG's
 zonder hartje naar de prullenbak; RAW's, exports, bewerkingen en hun originelen blijven altijd staan.

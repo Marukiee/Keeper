@@ -3,6 +3,7 @@ package nl.markmaaktmedia.keeper.ui
 import android.Manifest
 import android.os.Build
 import android.widget.Toast
+import nl.markmaaktmedia.keeper.convert.ConvertOptions
 import nl.markmaaktmedia.keeper.convert.ConvertState
 import android.content.pm.PackageManager
 import androidx.activity.compose.BackHandler
@@ -95,16 +96,21 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
     val convertState by converter.state.collectAsState()
     val outputFolder by context.graph.prefs.outputFolder.collectAsState(initial = "")
     val hasLocation = { ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_MEDIA_LOCATION) == PackageManager.PERMISSION_GRANTED }
+    // Wat er na het vragen van de toestemming gestart moet worden: alles wat meegaat, of alleen één foto.
+    var pendingConvert by remember { mutableStateOf(ConvertOptions()) }
     val convertPermissions = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
-        if (hasLocation()) converter.start() else Toast.makeText(context, R.string.convert_need_location, Toast.LENGTH_LONG).show()
+        if (hasLocation()) converter.start(pendingConvert) else Toast.makeText(context, R.string.convert_need_location, Toast.LENGTH_LONG).show()
     }
-    val startConvert: () -> Unit = {
+    val beginConvert: (ConvertOptions) -> Unit = { options ->
         val missing = buildList {
             if (!hasLocation()) add(Manifest.permission.ACCESS_MEDIA_LOCATION)
             if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) add(Manifest.permission.POST_NOTIFICATIONS)
         }
-        if (missing.isEmpty()) converter.start() else convertPermissions.launch(missing.toTypedArray())
+        if (missing.isEmpty()) converter.start(options) else { pendingConvert = options; convertPermissions.launch(missing.toTypedArray()) }
     }
+    val startConvert: () -> Unit = { beginConvert(ConvertOptions()) }
+    // Alleen deze foto, uit de viewer: de selectie blijft zoals ze is, en staat er al een versie (of dezelfde naam) dan komt er een tweede naast.
+    val convertOne: (Photo) -> Unit = { photo -> beginConvert(ConvertOptions(only = setOf(photo.item.id), newVersion = true)) }
     val converting = convertState is ConvertState.Running
     // Na een pauze heet de knop Doorgaan; het onthouden zit in de instellingen, dus het geldt ook na het afsluiten van de app.
     val paused by context.graph.prefs.convertPaused.collectAsState(initial = false)
@@ -183,6 +189,7 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
                     { photo, on -> vm.select(listOf(photo), on) }, { photo -> vm.reject(listOf(photo)) }, { photo -> trash(listOf(photo)) }, { sub = Sub.None },
                     onUndoReject = { photo -> vm.undoReject(listOf(photo)) },
                     bounds = tileBounds, onCurrent = { viewerCurrent = it },
+                    onConvertOne = convertOne, converting = converting,
                 )
             }
         }
