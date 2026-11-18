@@ -8,7 +8,7 @@ in een map die Immich zelf back-upt.
 
 Fase 0 (prototype) is klaar en goedgekeurd. Fase 1 (overzicht, alleen lezen) is gebouwd en staat op branch `claude/fase-1-overzicht`:
 galerij als startscherm met bewaren (tik op het rondje, ingedrukt houden en slepen), favorieten, groot bekijken met zoomen,
-Lightroom-knop op RAW, naar de prullenbak (alleen met Android's bevestiging), Opruimen per dag, overzicht, Bewerken en Instellingen
+Lightroom-knop op RAW, naar de prullenbak (met Android's bevestiging, of met Mediabeheer met een bevestiging in de app), Opruimen per dag, overzicht, Bewerken en Instellingen
 (kwaliteit en tone map). Het omzetten zelf (fase 2) en de Immich-omschakeling plus release-workflow (fase 3) wachten op Mark's OK.
 
 Fase 2 (omzetten) is bezig op branch `claude/fase-2-omzetten`. Klaar en getest: tone map, Ultra HDR-lezer met gain-map-sampler, eigen
@@ -134,7 +134,7 @@ Originelen verbergen (2026-11-18, `OriginalsHiding`, `OriginalsHider`, `HideEntr
 id en grootte van de uitvoer, of de uitvoer Ultra HDR is) als `OriginalsHiding.eligible`: alleen camera-JPG's (status Convert of AsIs, hoe Convert of Copy) uit `DCIM/` die geen favoriet zijn, en alleen in een hele run (niet bij "alleen deze foto", "nieuwe versie" of een testmap: dan is Mark nog aan het uitproberen). Nooit een DNG
 (de camera-versie vervangt de RAW niet), nooit een Lightroom-export of Galerij-bewerking. De app (niet de service; het verzoek is een scherm) pakt de lijst op zodra hij vooraan staat (na een run, en bij elke `ON_RESUME`; `AppRoot`, `hideCheck`) en laat `OriginalsHider.verify` elk item opnieuw controleren: uitvoer
 bestaat, is niet meer pending, even groot als geschreven en niet leeg, decodeert op de afmetingen van het origineel (ook gedraaid), bij HDR behouden nog een gain map (`UltraHdrReader`); origineel heeft nog dezelfde naam en grootte, staat nog in DCIM en is geen favoriet. Wat niet klopt, gaat van de lijst en blijft staan. De rest gaat in één
-`MediaStore.createTrashRequest` naar de prullenbak: Android vraagt één bevestiging per pakket ("Allow Keeper to move this photo to trash?"), of geen als Keeper de speciale toegang Mediabeheer heeft (manifest `MANAGE_MEDIA`; Instellingen toont dan een rij die naar de systeempagina "Media management apps" gaat). Een directe `update` van `IS_TRASHED` mag
+`MediaStore.createTrashRequest` naar de prullenbak: Android vraagt één bevestiging per pakket ("Allow Keeper to move this photo to trash?"), of geen als Keeper de speciale toegang Mediabeheer heeft (manifest `MANAGE_MEDIA`; Instellingen toont dan een rij die naar de systeempagina "Media management apps" gaat). Dat geldt voor elk `createTrashRequest` van de app, dus ook voor Verwijderen (viewer, Bewerken, selectie) en Opruimen: met Mediabeheer verschijnt nergens meer een dialoog van Android, daarom vraagt `AppRoot.trash` dan zelf in de app (`trashAsk`, `KeeperConfirmDialog`; Opruimen heeft zijn eigen `CleanupDialog` en gaat via `trashNow`, zonder tweede vraag). Een directe `update` van `IS_TRASHED` mag
 ook mét Mediabeheer niet op andermans bestanden ("has no access", op de emulator geprobeerd), dus dat bestaat niet. Weigert Mark de bevestiging, dan gaan de regels van de lijst en vraagt Keeper er niet opnieuw om (eerst van de lijst af en dan pas `hideAsked` vrijgeven: anders kwam er na het sluiten van de dialoog een tweede). Gevolgen die in de
 instellingstekst staan: zonder HDR behouden is de HDR van het origineel na het legen van de prullenbak voorgoed weg (Immich bewaart alleen de Keeper-map); een origineel in de prullenbak staat niet meer in de scanner, dus "Nieuwe versie maken" en een andere HDR-sterkte kunnen dan niet meer tot het is teruggezet. Op de emulator gecontroleerd
 (originelen van `com.android.shell`, zoals de camera's bestanden): controle slaagt, een ontbrekende uitvoer geeft een afvallend item, de dialoog met Deny (niets verborgen, lijst leeg, geen tweede dialoog) en Allow (bestand wordt `.trashed-<verloop>-naam`, verloop precies 30 dagen later, lijst leeg), en met `appops set ... MANAGE_MEDIA allow` verschijnt geen dialoog.
@@ -170,6 +170,7 @@ zonder hartje naar de prullenbak; RAW's, exports, bewerkingen en hun originelen 
   (Instellingen > Omzetten, standaard UIT, Mark zet het zelf aan): na een hele run gaan de camera-JPG's uit DCIM waarvan de uitvoer klopt
   naar de prullenbak van MediaStore (nooit zelf wissen; Android haalt ze na 30 dagen weg, tot dan terug te zetten). Voorwaarden staan bij
   "Originelen verbergen" hieronder; ze zijn bewust smal en horen smal te blijven.
+  Mediabeheer (speciale toegang) haalt Android's bevestiging bij elk prullenbakverzoek weg: wat een bevestiging nodig heeft, moet die dan zelf in de app vragen (zoals `AppRoot.trash`).
 - Geen accessibility service (Triodos ziet de telefoon dan als geroot).
 - Op de telefoon installeren alleen met Mark's OK.
 - Alleen zwaar werk tijdens het opladen, tenzij Mark de knop toch indrukt (WorkManager plus voortgangsnotificatie).

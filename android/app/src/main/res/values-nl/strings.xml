@@ -129,6 +129,11 @@
     <string name="cleanup_note">Android vraagt daarna nog om bevestiging. In de prullenbak kun je ze terugzetten.</string>
     <string name="cleanup_cancel">Annuleren</string>
     <string name="cleanup_confirm">%1$d naar prullenbak</string>
+    <string name="cleanup_note_managed">In de prullenbak kun je ze terugzetten.</string>
+    <string name="trash_confirm_title">Naar de prullenbak?</string>
+    <string name="trash_confirm_one">Deze foto gaat naar de prullenbak. Daar kun je hem terugzetten.</string>
+    <string name="trash_confirm_many">%1$d foto\'s gaan naar de prullenbak. Daar kun je ze terugzetten.</string>
+    <string name="trash_confirm_button">Naar prullenbak</string>
 
     <string name="settings_quality_sub">Hoger is scherper en groter</string>
     <string name="settings_quality_estimate">Ongeveer %1$s bit per pixel, een foto van 50 MP wordt dan ongeveer %2$s</string>
@@ -224,9 +229,9 @@
     <string name="settings_keep_hdr">HDR behouden</string>
     <string name="settings_keep_hdr_sub">De foto blijft een HDR-foto (Ultra HDR) en wordt alleen kleiner. Op een HDR-scherm zie je de extra helderheid, apps die geen HDR kennen tonen de gewone versie. Uit: een SDR-foto met de tone map hieronder.</string>
     <string name="settings_hide_originals">Originelen verbergen</string>
-    <string name="settings_hide_originals_sub">Is de omzetting gelukt en klopt de uitvoer, dan gaat het origineel naar de prullenbak van je Galerij: geen dubbele foto\'s meer in je feed. Alleen JPG\'s uit DCIM, nooit RAW\'s, Lightroom-exports of bewerkingen. Android haalt het na de bewaartermijn van de prullenbak zelf weg (meestal 30 dagen); tot dan kun je het terugzetten.</string>
+    <string name="settings_hide_originals_sub">Is de omzetting gelukt en klopt de uitvoer, dan gaat het origineel naar de prullenbak van Android: geen dubbele foto\'s meer in je feed. Alleen JPG\'s uit DCIM, nooit RAW\'s, Lightroom-exports of bewerkingen. Android haalt het na de bewaartermijn van de prullenbak zelf weg (meestal 30 dagen); tot dan kun je het terugzetten.</string>
     <string name="settings_hide_originals_warn_title">Let op</string>
-    <string name="settings_hide_originals_warn">Zonder HDR behouden is de HDR van het origineel weg zodra het uit de prullenbak verdwijnt: Immich bewaart alleen de Keeper-map. En zolang het origineel in de prullenbak staat, kun je die foto in Keeper niet opnieuw omzetten of een andere HDR-sterkte geven; zet hem eerst terug in de Galerij.</string>
+    <string name="settings_hide_originals_warn">Zonder HDR behouden is de HDR van het origineel weg zodra het uit de prullenbak verdwijnt: Immich bewaart alleen de Keeper-map. En zolang het origineel in de prullenbak staat, kun je die foto in Keeper niet opnieuw omzetten of een andere HDR-sterkte geven; zet hem eerst terug uit de prullenbak.</string>
     <string name="settings_manage_media">Zonder bevestiging verbergen</string>
     <string name="settings_manage_media_sub">Geef Keeper toegang tot mediabeheer, dan hoeft Android niet elke keer te vragen. Dat zet je zelf aan in de systeeminstellingen.</string>
     <string name="hdr_strength_percent">%1$d%%</string>

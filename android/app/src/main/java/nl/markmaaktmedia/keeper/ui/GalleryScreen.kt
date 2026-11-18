@@ -58,6 +58,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import nl.markmaaktmedia.keeper.graph
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -145,6 +146,8 @@ fun GalleryScreen(
     bounds: TileBounds = TileBounds(),
     /** De foto die nu groot open staat: zijn tegel blijft leeg (het gat waar hij naartoe terugvliegt) en de lijst scrolt ernaartoe. */
     hiddenId: Long? = null,
+    /** Opruimen heeft zijn eigen bevestiging al gehad (de dialoog hieronder): dit gaat zonder tweede vraag naar de prullenbak. */
+    onCleanupTrash: (List<Photo>) -> Unit = onTrashMany,
 ) {
     // Opruimen: welke dag en welke foto's van die dag. Pas na een bevestiging gaat er iets naar de prullenbak.
     var cleanup by remember { mutableStateOf<Pair<String, List<Photo>>?>(null) }
@@ -203,7 +206,7 @@ fun GalleryScreen(
         )
     }
     cleanup?.let { (day, photos) ->
-        CleanupDialog(day, photos, { remove -> cleanup = null; onTrashMany(remove) }, { cleanup = null })
+        CleanupDialog(day, photos, { remove -> cleanup = null; onCleanupTrash(remove) }, { cleanup = null })
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -302,7 +305,9 @@ private fun CleanupDialog(day: String, photos: List<Photo>, onConfirm: (List<Pho
         append(stringResource(R.string.cleanup_body, remove.size, day))
         if (kept == 0) append("\n\n").append(stringResource(R.string.cleanup_none_kept))
         if (stays.isNotEmpty()) append("\n\n").append(stringResource(R.string.cleanup_stays, stays.joinToString(", ")))
-        append("\n\n").append(stringResource(R.string.cleanup_note))
+        // Met Mediabeheer vraagt Android niets meer: deze dialoog is dan de enige bevestiging.
+        val androidAsks = !LocalContext.current.graph.hider.canManageMedia
+        append("\n\n").append(stringResource(if (androidAsks) R.string.cleanup_note else R.string.cleanup_note_managed))
     }
     KeeperDialog(
         title = stringResource(R.string.cleanup_title, day),

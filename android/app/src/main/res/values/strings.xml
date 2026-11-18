@@ -131,6 +131,11 @@
     <string name="cleanup_note">Android asks for confirmation after this. In the trash you can restore them.</string>
     <string name="cleanup_cancel">Cancel</string>
     <string name="cleanup_confirm">%1$d to trash</string>
+    <string name="cleanup_note_managed">In the trash you can restore them.</string>
+    <string name="trash_confirm_title">Move to the trash?</string>
+    <string name="trash_confirm_one">This photo goes to the trash. You can restore it there.</string>
+    <string name="trash_confirm_many">%1$d photos go to the trash. You can restore them there.</string>
+    <string name="trash_confirm_button">Move to trash</string>
 
     <string name="settings_quality_sub">Higher is sharper and bigger</string>
     <string name="settings_quality_estimate">About %1$s bits per pixel, so a 50 MP photo comes to about %2$s</string>
@@ -226,9 +231,9 @@
     <string name="settings_keep_hdr">Keep HDR</string>
     <string name="settings_keep_hdr_sub">The photo stays an HDR photo (Ultra HDR) and only gets smaller. On an HDR screen you see the extra brightness, apps that do not know HDR show the normal version. Off: an SDR photo made with the tone map below.</string>
     <string name="settings_hide_originals">Hide originals</string>
-    <string name="settings_hide_originals_sub">When the conversion worked and the output checks out, the original moves to the trash of your Gallery: no more duplicate photos in your feed. Only JPEGs from DCIM, never RAWs, Lightroom exports or edits. Android removes it itself after the trash keeping period (usually 30 days); until then you can restore it.</string>
+    <string name="settings_hide_originals_sub">When the conversion worked and the output checks out, the original moves to Android\'s trash: no more duplicate photos in your feed. Only JPEGs from DCIM, never RAWs, Lightroom exports or edits. Android removes it itself after the trash keeping period (usually 30 days); until then you can restore it.</string>
     <string name="settings_hide_originals_warn_title">Note</string>
-    <string name="settings_hide_originals_warn">Without Keep HDR, the original\'s HDR is gone once it leaves the trash: Immich only backs up the Keeper folder. And while the original is in the trash, you cannot convert that photo again in Keeper or give it another HDR strength; restore it in the Gallery first.</string>
+    <string name="settings_hide_originals_warn">Without Keep HDR, the original\'s HDR is gone once it leaves the trash: Immich only backs up the Keeper folder. And while the original is in the trash, you cannot convert that photo again in Keeper or give it another HDR strength; restore it from the trash first.</string>
     <string name="settings_manage_media">Hide without asking</string>
     <string name="settings_manage_media_sub">Give Keeper media management access and Android does not have to ask every time. You turn that on yourself in the system settings.</string>
     <string name="hdr_strength_percent">%1$d%%</string>

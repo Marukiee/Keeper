@@ -55,6 +55,7 @@ import nl.markmaaktmedia.keeper.R
 import nl.markmaaktmedia.keeper.graph
 import nl.markmaaktmedia.keeper.scan.Status
 import nl.markmaaktmedia.keeper.ui.settings.SettingsPage
+import nl.markmaaktmedia.keeper.ui.components.KeeperConfirmDialog
 import nl.markmaaktmedia.keeper.ui.components.PillNavItem
 import nl.markmaaktmedia.keeper.ui.components.PillNavigationBar
 import nl.markmaaktmedia.keeper.ui.theme.KeeperIcons
@@ -80,16 +81,36 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
     var permitted by remember { mutableStateOf(granted(context)) }
     val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { permitted = it }
 
-    // Verwijderen is altijd naar de prullenbak en altijd met Android's eigen bevestiging; Keeper wist nooit zelf iets.
+    // Verwijderen is altijd naar de prullenbak; Keeper wist nooit zelf iets. De bevestiging komt van Android, tenzij Keeper de speciale toegang Mediabeheer
+    // heeft (zie "Originelen verbergen"): dan keurt het systeem elk verzoek zelf goed en verschijnt er niets. Dan vragen we het zelf, in de app, voor elk
+    // pad dat hier langskomt (enkele foto, selectie, Opruimen), want anders staat de foto na één tik zonder vraag in de prullenbak.
     val trashLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
         if (result.resultCode == android.app.Activity.RESULT_OK) vm.refresh()
     }
-    val trash: (List<Photo>) -> Unit = { photos ->
+    val trashNow: (List<Photo>) -> Unit = { photos ->
         if (photos.isNotEmpty()) {
             val uris = photos.map { MediaScanner.imageUri(it.item.id) }
             val request = MediaStore.createTrashRequest(context.contentResolver, uris, true)
             trashLauncher.launch(IntentSenderRequest.Builder(request.intentSender).build())
         }
+    }
+    var trashAsk by remember { mutableStateOf<List<Photo>>(emptyList()) }
+    val trash: (List<Photo>) -> Unit = { photos ->
+        if (photos.isNotEmpty()) {
+            if (context.graph.hider.canManageMedia) trashAsk = photos else trashNow(photos)
+        }
+    }
+    if (trashAsk.isNotEmpty()) {
+        val photos = trashAsk
+        KeeperConfirmDialog(
+            title = stringResource(R.string.trash_confirm_title),
+            body = if (photos.size == 1) stringResource(R.string.trash_confirm_one) else stringResource(R.string.trash_confirm_many, photos.size),
+            confirmLabel = stringResource(R.string.trash_confirm_button),
+            cancelLabel = stringResource(R.string.cleanup_cancel),
+            onConfirm = { trashNow(photos) },
+            onDismiss = { trashAsk = emptyList() },
+            destructive = true,
+        )
     }
 
     // Originelen verbergen (instelling, standaard uit): wat de laatste run klaarzette gaat na controle naar de prullenbak, met één verzoek aan Android voor het
@@ -192,6 +213,7 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
                         startConvert, converting, paused,
                         { vm.clearSelection() },
                         bounds = tileBounds,
+                        onCleanupTrash = trashNow,
                         // Zolang de viewer open staat blijft de tegel van de getoonde foto leeg.
                         hiddenId = if (sub == Sub.Viewer) viewerCurrent else null,
                     )
