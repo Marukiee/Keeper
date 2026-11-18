@@ -221,6 +221,8 @@
     <string name="convert_need_location">Keeper heeft toegang tot de locatie van je foto\'s nodig, anders gaan de GPS-gegevens verloren. Sta dat toe in de instellingen van Keeper.</string>
     <string name="settings_hdr_strength">HDR-sterkte</string>
     <string name="settings_hdr_strength_body" formatted="false">Hoeveel van de HDR van de camera meetelt. 100% is de volle HDR, 0% de SDR-versie van de camera. Per foto kan het ook.</string>
+    <string name="settings_keep_hdr">HDR behouden</string>
+    <string name="settings_keep_hdr_sub">De foto blijft een HDR-foto (Ultra HDR) en wordt alleen kleiner. Op een HDR-scherm zie je de extra helderheid, apps die geen HDR kennen tonen de gewone versie. Uit: een SDR-foto met de tone map hieronder.</string>
     <string name="hdr_strength_percent">%1$d%%</string>
     <string name="hdr_strength_sdr">SDR</string>
     <string name="hdr_strength_hdr">HDR</string>

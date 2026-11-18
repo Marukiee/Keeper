@@ -40,6 +40,7 @@ class KeeperPrefs(private val context: Context) {
         val toneMap = stringPreferencesKey("tone_map")
         val hdrStrength = intPreferencesKey("hdr_strength")
         val hdrStrengthByName = stringSetPreferencesKey("hdr_strength_by_name")
+        val keepHdr = booleanPreferencesKey("keep_hdr")
         val lookDefault = stringPreferencesKey("look_default")
         val themeMode = stringPreferencesKey("theme_mode")
         val seed = stringPreferencesKey("seed")
@@ -142,6 +143,13 @@ class KeeperPrefs(private val context: Context) {
         if (percent == null) now.remove(name) else now[name] = percent.coerceIn(0, 100)
         it[K.hdrStrengthByName] = StrengthEntries.encode(now)
     }
+
+    /**
+     * HDR behouden: de uitvoer blijft een Ultra HDR-bestand (hoofdbeeld opnieuw gecodeerd, gain map mee, met de HDR-sterkte erin) in plaats van een
+     * SDR-bestand met tone map. Standaard uit.
+     */
+    val keepHdr: Flow<Boolean> = data.map { it[K.keepHdr] ?: false }.distinctUntilChanged()
+    suspend fun setKeepHdr(on: Boolean) = edit { it[K.keepHdr] = on }
 
     /** Preset die Lightroom over een RAW krijgt als de camera-JPG ernaast niet zegt welke het was ("" is geen). Zie `LookPreset`. */
     val lookDefault: Flow<String> = data.map { it[K.lookDefault] ?: "" }

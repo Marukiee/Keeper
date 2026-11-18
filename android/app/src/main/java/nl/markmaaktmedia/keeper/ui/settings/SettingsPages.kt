@@ -124,6 +124,7 @@ internal fun ConvertPage(onBack: () -> Unit, contentPadding: PaddingValues) {
     val quality by prefs.quality.collectAsState(initial = 94)
     val toneMapId by prefs.toneMap.collectAsState(initial = "normaal")
     val toneMap = ToneMap.of(toneMapId)
+    val keepHdr by prefs.keepHdr.collectAsState(initial = false)
 
     val savedStrength by prefs.hdrStrength.collectAsState(initial = 100)
     // Tijdens het schuiven telt de schuif zelf; opgeslagen wordt bij loslaten.
@@ -131,7 +132,8 @@ internal fun ConvertPage(onBack: () -> Unit, contentPadding: PaddingValues) {
 
     SettingsPageFrame(stringResource(R.string.settings_convert), onBack, contentPadding) {
         SettingsGroup {
-            ContentRow(0, 3, KeeperIcons.Image, stringResource(R.string.settings_quality)) {
+            SwitchRow(0, 4, KeeperIcons.Photos, stringResource(R.string.settings_keep_hdr), stringResource(R.string.settings_keep_hdr_sub), keepHdr, { scope.launch { prefs.setKeepHdr(it) } })
+            ContentRow(1, 4, KeeperIcons.Image, stringResource(R.string.settings_quality)) {
                 SegmentedPillRow(JpegQuality.options, quality, { "q$it" }, { scope.launch { prefs.setQuality(it) } }, equalWidth = true)
                 val bpp = JpegQuality.bitsPerPixel(quality)
                 Text(
@@ -139,14 +141,14 @@ internal fun ConvertPage(onBack: () -> Unit, contentPadding: PaddingValues) {
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            ContentRow(1, 3, KeeperIcons.Tune, stringResource(R.string.settings_hdr_strength)) {
+            ContentRow(2, 4, KeeperIcons.Tune, stringResource(R.string.settings_hdr_strength)) {
                 HdrStrengthSlider(strength, { strength = it }, onFinished = { scope.launch { prefs.setHdrStrength(strength) } })
                 Text(
                     stringResource(R.string.settings_hdr_strength_body),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            ContentRow(2, 3, KeeperIcons.Tune, stringResource(R.string.settings_tonemap)) {
+            ContentRow(3, 4, KeeperIcons.Tune, stringResource(R.string.settings_tonemap)) {
                 val names = mapOf(
                     ToneMap.Licht to stringResource(R.string.tonemap_licht),
                     ToneMap.Normaal to stringResource(R.string.tonemap_normaal),

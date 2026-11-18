@@ -11,9 +11,52 @@ class GainMapMeta(
     val min: FloatArray, val max: FloatArray, val gamma: FloatArray,
     val offSdr: FloatArray, val offHdr: FloatArray,
     val capMin: Float, val capMax: Float, val baseIsHdr: Boolean,
-)
+) {
+    /**
+     * Dezelfde gain map met de HDR-sterkte [strength] (0 tot 1) erin verwerkt, voor HDR behouden: alle gains (log2) keer de sterkte, precies
+     * wat [GainMapSampler] in de SDR-omzetting doet. De HDR-offset schuift mee naar de SDR-offset (bij gelijke offsets verandert er niets), zodat
+     * sterkte 0 ook bij ongelijke offsets exact de SDR van de camera geeft. De capaciteit (`capMin`/`capMax`) blijft staan: het scherm weegt de gain
+     * map daar nog steeds mee, en dan is het resultaat op elk scherm precies [strength] keer de gain van het origineel.
+     */
+    fun scaled(strength: Float): GainMapMeta {
+        val s = strength.coerceIn(0f, 1f)
+        return GainMapMeta(
+            min = FloatArray(3) { min[it] * s }, max = FloatArray(3) { max[it] * s }, gamma = gamma.copyOf(),
+            offSdr = offSdr.copyOf(), offHdr = FloatArray(3) { offSdr[it] + s * (offHdr[it] - offSdr[it]) },
+            capMin = capMin, capMax = capMax, baseIsHdr = baseIsHdr,
+        )
+    }
+}
 
 object GainMapXmp {
+    /**
+     * De hdrgm-XMP van een gain map, in de vorm die de camera's ook schrijven (attributen; lijsten alleen als de kanalen verschillen).
+     * Wat [parse] leest, komt hier weer uit.
+     */
+    fun build(m: GainMapMeta): String {
+        val attrs = StringBuilder()
+        val lists = StringBuilder()
+        fun add(name: String, v: FloatArray) {
+            if (v[0] == v[1] && v[1] == v[2]) attrs.append("\n      hdrgm:").append(name).append("=\"").append(number(v[0])).append('"')
+            else {
+                lists.append("\n      <hdrgm:").append(name).append("><rdf:Seq>")
+                v.forEach { lists.append("<rdf:li>").append(number(it)).append("</rdf:li>") }
+                lists.append("</rdf:Seq></hdrgm:").append(name).append('>')
+            }
+        }
+        attrs.append("\n      hdrgm:Version=\"1.0\"")
+        add("GainMapMin", m.min); add("GainMapMax", m.max); add("Gamma", m.gamma); add("OffsetSDR", m.offSdr); add("OffsetHDR", m.offHdr)
+        attrs.append("\n      hdrgm:HDRCapacityMin=\"").append(number(m.capMin)).append('"')
+        attrs.append("\n      hdrgm:HDRCapacityMax=\"").append(number(m.capMax)).append('"')
+        attrs.append("\n      hdrgm:BaseRenditionIsHDR=\"").append(if (m.baseIsHdr) "True" else "False").append('"')
+        val open = "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\" x:xmptk=\"Adobe XMP Core 5.1.2\">\n  <rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n" +
+            "    <rdf:Description xmlns:hdrgm=\"http://ns.adobe.com/hdr-gain-map/1.0/\""
+        return if (lists.isEmpty()) "$open$attrs/>\n  </rdf:RDF>\n</x:xmpmeta>\n" else "$open$attrs>$lists\n    </rdf:Description>\n  </rdf:RDF>\n</x:xmpmeta>\n"
+    }
+
+    /** Een getal in XMP: platte decimale notatie (nooit `1.0E-4`), tot zes decimalen, zonder staartnullen. */
+    internal fun number(v: Float): String = java.math.BigDecimal(v.toDouble()).setScale(6, java.math.RoundingMode.HALF_UP).stripTrailingZeros().toPlainString()
+
     /** Null als dit geen hdrgm-XMP is. Kent zowel attributen (`hdrgm:GainMapMax="2.3"`) als lijsten (`<rdf:Seq><rdf:li>`). */
     fun parse(xmp: String): GainMapMeta? {
         if (!xmp.contains("hdrgm:")) return null
@@ -86,7 +129,7 @@ class GainMapSampler(
     private val meta: GainMapMeta?, private val gm: GainMapImage?, private val width: Int, private val height: Int,
     /**
      * HDR-sterkte, 0 tot 1: hoeveel van de gain map meetelt. Alle gains (log2) worden met deze factor vermenigvuldigd, dus 1 is de volle HDR
-     * van de camera en 0 de SDR van de camera. Dit is ook wat [GainMapXmp.scaled] in het bestand zet bij HDR behouden.
+     * van de camera en 0 de SDR van de camera. Dit is ook wat [GainMapMeta.scaled] in het bestand zet bij HDR behouden.
      */
     strength: Float = 1f,
 ) {

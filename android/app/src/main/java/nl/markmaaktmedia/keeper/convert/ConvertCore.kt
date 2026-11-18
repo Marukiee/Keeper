@@ -122,8 +122,20 @@ internal object ConvertCore {
         }
     }
 
-    /** De gain map als bytes: één kanaal als alle pixels grijs zijn, anders drie. */
-    fun loadGainMap(source: JpegSource, layout: UltraHdrLayout): GainMapImage {
+    /** Rijen [r0, r1) van een strook ongewijzigd van ARGB_8888 naar 8-bit RGB in [out] (HDR behouden: het hoofdbeeld verandert niet, het wordt alleen opnieuw gecodeerd). */
+    fun rgb(raw: ByteArray, rowBytes: Int, r0: Int, r1: Int, w: Int, out: ByteArray) {
+        for (r in r0 until r1) {
+            var p = r * rowBytes
+            var o = r * w * 3
+            for (x in 0 until w) {
+                out[o] = raw[p]; out[o + 1] = raw[p + 1]; out[o + 2] = raw[p + 2]
+                p += 4; o += 3
+            }
+        }
+    }
+
+    /** De gain map zoals hij in het bestand staat: een complete JPEG. */
+    fun gainBytes(source: JpegSource, layout: UltraHdrLayout): ByteArray {
         val bytes = ByteArray(layout.gainLength.toInt())
         source.open().use { pfd ->
             FileInputStream(pfd.fileDescriptor).use { ins ->
@@ -132,6 +144,12 @@ internal object ConvertCore {
                 while (got < bytes.size) { val n = ins.read(bytes, got, bytes.size - got); if (n < 0) error("gain map afgekapt"); got += n }
             }
         }
+        return bytes
+    }
+
+    /** De gain map als bytes: één kanaal als alle pixels grijs zijn, anders drie. */
+    fun loadGainMap(source: JpegSource, layout: UltraHdrLayout): GainMapImage {
+        val bytes = gainBytes(source, layout)
         val opts = BitmapFactory.Options().apply { inPreferredConfig = Bitmap.Config.ARGB_8888 }
         val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts) ?: error("gain map niet te decoderen")
         val gw = bmp.width

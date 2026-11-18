@@ -5,12 +5,15 @@ import android.graphics.BitmapFactory
 import android.graphics.BitmapRegionDecoder
 import android.graphics.Rect
 import android.os.ParcelFileDescriptor
+import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
+import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.math.pow
 import nl.markmaaktmedia.keeper.convert.ConvertCore.Measured
 import nl.markmaaktmedia.keeper.convert.ConvertCore.Scratch
 import nl.markmaaktmedia.keeper.scan.ToneMap
@@ -27,8 +30,13 @@ class ConvertSettings(
     val chroma420: Boolean = true,
     /** HDR-sterkte, 0 tot 1 (zie [GainMapSampler]); 1 is de volle HDR van de camera, zoals het altijd was. */
     val strength: Float = 1f,
+    /** HDR behouden (zie [Converter.keepHdr]) in plaats van naar SDR omzetten. Bij sterkte 0 is er niets te behouden en wordt het toch SDR. */
+    val keepHdr: Boolean = false,
 ) {
-    fun withStrength(value: Float) = ConvertSettings(jpegQuality, toneMap, chroma420, value.coerceIn(0f, 1f))
+    fun withStrength(value: Float) = ConvertSettings(jpegQuality, toneMap, chroma420, value.coerceIn(0f, 1f), keepHdr)
+
+    /** Of dit een Ultra HDR-bestand wordt: aan gezet, en met een sterkte die iets overlaat. */
+    val keepsHdr: Boolean get() = keepHdr && strength > 0f
 }
 
 class ConvertResult(val width: Int, val height: Int, val peak: Float, val gainMapSize: String, val colorSpace: String, val millis: Long)
@@ -69,16 +77,39 @@ class Converter(private val stripRows: Int = 256, private val log: (String) -> U
         val sampler = GainMapSampler(layout.meta, gain, w, h, settings.strength)
         val segments = segmentsFor(layout.primary, layout, space)
 
-        // Vier trappen naast elkaar: een thread decodeert de volgende strook, de pixelstap rekent de huidige over meerdere threads, en het
-        // coderen (JPEG, per MCU-rij los) loopt op zijn eigen pool terwijl de volgende strook wordt voorbereid.
-        val workers = Runtime.getRuntime().availableProcessors().coerceIn(1, 4)
+        val scratches = List(workerCount) { Scratch(w, sampler.newScratch()) }
+        encodeStrips(source, w, h, settings, segments, out, 0.1f, onProgress, cancelled) { raw, rowBytes, y0, r0, r1, worker, buf ->
+            ConvertCore.pixels(raw, rowBytes, y0, r0, r1, w, sampler, mapper, contrast, scratches[worker], buf)
+        }
+        val ms = (System.nanoTime() - t0) / 1_000_000
+        log("klaar in $ms ms")
+        return ConvertResult(w, h, peak, "${gain.width}x${gain.height}x${gain.channels}", space, ms)
+    }
+
+    /** Vult rijen [r0, r1) van een strook (die begint op rij [y0] van het beeld) met 8-bit RGB in [out], vanaf rij [r0] van die strook; [worker] is het nummer van de thread, 0 tot het aantal threads. */
+    private fun interface StripFill {
+        fun fill(raw: ByteArray, rowBytes: Int, y0: Int, r0: Int, r1: Int, worker: Int, out: ByteArray)
+    }
+
+    private val workerCount: Int get() = Runtime.getRuntime().availableProcessors().coerceIn(1, 4)
+
+    /**
+     * De stroken van het beeld: decoderen, [fill] erover, coderen naar [out] met [segments] in de kop. Voortgang loopt van [progressBase] tot 1.
+     *
+     * Vier trappen naast elkaar: een thread decodeert de volgende strook, de pixelstap rekent de huidige over meerdere threads, en het
+     * coderen (JPEG, per MCU-rij los) loopt op zijn eigen pool terwijl de volgende strook wordt voorbereid.
+     */
+    private fun encodeStrips(
+        source: JpegSource, w: Int, h: Int, settings: ConvertSettings, segments: List<ByteArray>, out: OutputStream,
+        progressBase: Float, onProgress: (Float) -> Unit, cancelled: () -> Boolean, fill: StripFill,
+    ) {
+        val workers = workerCount
         val regionFd = source.open()
         val decoder = try { BitmapRegionDecoder.newInstance(regionFd) } catch (t: Throwable) { regionFd.close(); throw t }
         val pool = Executors.newFixedThreadPool(workers)
         val encodePool = Executors.newFixedThreadPool(workers)
         val encodeThread = Executors.newSingleThreadExecutor()
         val decodeThread = Executors.newSingleThreadExecutor()
-        val scratches = List(workers) { Scratch(w, sampler.newScratch()) }
         val buffers = Array(2) { ByteArray(w * 3 * stripRows) }
         val encoding = arrayOfNulls<Future<*>>(2)
         // Twee ruwe stroken: de ene wordt gedecodeerd terwijl de andere gerekend wordt.
@@ -120,12 +151,12 @@ class Converter(private val stripRows: Int = 256, private val log: (String) -> U
                 val tasks = (0 until workers).mapNotNull { i ->
                     val r0 = i * chunk
                     val r1 = minOf(r0 + chunk, rows)
-                    if (r0 >= r1) null else pool.submit { ConvertCore.pixels(raw, rowBytes, y0, r0, r1, w, sampler, mapper, contrast, scratches[i], buf) }
+                    if (r0 >= r1) null else pool.submit { fill.fill(raw, rowBytes, y0, r0, r1, i, buf) }
                 }
                 tasks.forEach { it.await() }
                 tPixels += System.nanoTime() - t
                 encoding[k % 2] = encodeThread.submit { encoder.writeRows(buf, 0, rows) }
-                onProgress(0.1f + 0.9f * y1 / h)
+                onProgress(progressBase + (1f - progressBase) * y1 / h)
             }
             encoding.forEach { it?.await() }
             encoder.finish()
@@ -141,9 +172,51 @@ class Converter(private val stripRows: Int = 256, private val log: (String) -> U
             decoder.recycle()
             regionFd.close()
         }
+    }
+
+    /**
+     * HDR behouden: de foto blijft een Ultra HDR-bestand. Het hoofdbeeld (de SDR van de camera, pixel voor pixel) wordt opnieuw gecodeerd
+     * met [ConvertSettings.jpegQuality], de gain map gaat er ongewijzigd achter aan, met de HDR-sterkte [ConvertSettings.strength] in de XMP en
+     * het ISO-blok (zie [GainMapMeta.scaled]). Er is geen meetpass en geen tone map nodig, dus dit is veel sneller dan omzetten naar SDR.
+     *
+     * De MPF-directory moet de lengte van het hoofdbeeld weten, die pas bekend is als het gecodeerd is: het hoofdbeeld gaat daarom eerst naar
+     * [work], de MPF wordt daarin ingevuld, en dan volgt alles in één keer naar [out]. [work] wordt daarna weggehaald.
+     */
+    fun keepHdr(
+        source: JpegSource,
+        out: OutputStream,
+        settings: ConvertSettings,
+        work: File,
+        onProgress: (Float) -> Unit = {},
+        cancelled: () -> Boolean = { false },
+    ): ConvertResult {
+        val t0 = System.nanoTime()
+        val layout = UltraHdrReader.read { stream(source) } ?: throw NoGainMapException()
+        val w = layout.primary.width
+        val h = layout.primary.height
+        val gain = UltraHdrWriter.rewriteGainMap(ConvertCore.gainBytes(source, layout), layout.meta, settings.strength)
+        val header = OutputMetadata.ultraHdr(layout.primary, gain.size)
+        try {
+            work.parentFile?.mkdirs()
+            work.outputStream().buffered(256 * 1024).use { temp ->
+                encodeStrips(source, w, h, settings, header.segments, temp, 0f, { onProgress(it * 0.95f) }, cancelled) { raw, rowBytes, _, r0, r1, _, buf ->
+                    ConvertCore.rgb(raw, rowBytes, r0, r1, w, buf)
+                }
+            }
+            val primaryLength = work.length()
+            RandomAccessFile(work, "rw").use { f ->
+                f.seek(header.mpfOffset)
+                f.write(UltraHdrWriter.mpf(primaryLength, header.mpfOffset, gain.size.toLong()))
+            }
+            work.inputStream().use { it.copyTo(out, 256 * 1024) }
+            out.write(gain)
+            out.flush()
+        } finally {
+            work.delete()
+        }
         val ms = (System.nanoTime() - t0) / 1_000_000
-        log("klaar in $ms ms")
-        return ConvertResult(w, h, peak, "${gain.width}x${gain.height}x${gain.channels}", space, ms)
+        log("HDR behouden in $ms ms, sterkte ${settings.strength}, gain map ${gain.size} bytes")
+        return ConvertResult(w, h, 2f.pow(layout.meta.max.max() * settings.strength), "${layout.gain.width}x${layout.gain.height}", "ongewijzigd", ms)
     }
 
     private fun <T> Future<T>.await(): T = try { get() } catch (e: java.util.concurrent.ExecutionException) { throw e.cause ?: e }

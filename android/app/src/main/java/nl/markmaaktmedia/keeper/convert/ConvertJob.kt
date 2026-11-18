@@ -29,7 +29,11 @@ import kotlin.coroutines.coroutineContext
  * Ook voor "alleen deze foto omzetten" in de viewer: [only] zet die ene foto om zonder dat hij bewaard hoeft te zijn of te worden, en met
  * [newVersion] komt er een tweede versie naast als de eerste al in de uitvoermap staat (naam met `-2`), zodat ze te vergelijken zijn.
  */
-class ConvertOptions(val only: Set<Long>? = null, val folder: String? = null, val readOriginal: Boolean = true, val newVersion: Boolean = false)
+class ConvertOptions(
+    val only: Set<Long>? = null, val folder: String? = null, val readOriginal: Boolean = true, val newVersion: Boolean = false,
+    /** Alleen voor de debug-ontvanger: HDR behouden aan of uit, los van de instelling. Null is wat in de instellingen staat. */
+    val keepHdr: Boolean? = null,
+)
 
 /** Waar de run mee bezig is. [index] telt vanaf 1; [fraction] is hoever die ene foto is (0 tot 1). [item] en [how] zijn voor het scherm: welke foto, en wat ermee gebeurt. */
 data class ConvertProgress(val index: Int, val total: Int, val name: String, val fraction: Float, val item: MediaItem? = null, val how: How? = null, val alreadyDone: Int = 0)
@@ -99,6 +103,7 @@ class ConvertJob(private val context: Context, private val prefs: KeeperPrefs, p
             // Het gekozen "q94" is jpegli; onze encoder is libjpeg en geeft bij twee lager dezelfde grootte en kwaliteit (gemeten in fase 2).
             jpegQuality = (prefs.quality.first() - 2).coerceIn(50, 98),
             toneMap = ToneMap.of(prefs.toneMap.first()),
+            keepHdr = options.keepHdr ?: prefs.keepHdr.first(),
         )
         // De HDR-sterkte: de standaard uit Instellingen, of wat Mark voor deze ene foto instelde (per bestandsnaam van het origineel).
         val defaultStrength = prefs.hdrStrength.first()
@@ -188,10 +193,15 @@ class ConvertJob(private val context: Context, private val prefs: KeeperPrefs, p
         return Written(size, 0, true)
     }
 
-    /** SDR uit een Ultra HDR-JPEG; zonder gain map (de kop zei anders) gaat het bestand zoals het is. */
+    /**
+     * SDR uit een Ultra HDR-JPEG, of met HDR behouden de Ultra HDR-JPEG opnieuw gecodeerd; zonder gain map (de kop zei anders) gaat het bestand
+     * zoals het is.
+     */
     private fun convert(source: JpegSource, size: Long, out: OutputStream, settings: ConvertSettings, cancelled: () -> Boolean, progress: (Float) -> Unit): Written =
         try {
-            Converter(log = { android.util.Log.d("KeeperConvert", it) }).convert(source, out, settings, { head, _, _ -> OutputMetadata.segments(head) }, progress, cancelled)
+            val converter = Converter(log = { android.util.Log.d("KeeperConvert", it) })
+            if (settings.keepsHdr) converter.keepHdr(source, out, settings, File(work, "keep-hdr.jpg"), progress, cancelled)
+            else converter.convert(source, out, settings, { head, _, _ -> OutputMetadata.segments(head) }, progress, cancelled)
             Written(size, 0, false)
         } catch (_: NoGainMapException) {
             ParcelFileDescriptor.AutoCloseInputStream(source.open()).use { copy(it, out, size, progress) }

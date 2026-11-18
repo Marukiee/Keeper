@@ -3,6 +3,7 @@ package nl.markmaaktmedia.keeper.debug
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.graphics.ImageDecoder
 import android.os.ParcelFileDescriptor
 import android.util.Log
 import java.io.BufferedOutputStream
@@ -14,37 +15,45 @@ import nl.markmaaktmedia.keeper.convert.ConvertOptions
 import nl.markmaaktmedia.keeper.convert.ConvertSettings
 import nl.markmaaktmedia.keeper.graph
 import nl.markmaaktmedia.keeper.convert.Converter
+import nl.markmaaktmedia.keeper.convert.JpegSource
 import nl.markmaaktmedia.keeper.convert.JpegSegments
 import nl.markmaaktmedia.keeper.scan.ToneMap
 
 /**
  * adb shell am broadcast -n nl.markmaaktmedia.keeper.debug/nl.markmaaktmedia.keeper.debug.ConvertDebugReceiver \
- *   -a nl.markmaaktmedia.keeper.CONVERT --es in foto.jpg --es out uit.jpg --ei q 92 --es tonemap normaal [--ei strength 50]
+ *   -a nl.markmaaktmedia.keeper.CONVERT --es in foto.jpg --es out uit.jpg --ei q 92 --es tonemap normaal [--ei strength 50] [--ez keephdr true]
  * Bestanden staan in de eigen map van de app (filesDir); de uitslag staat in logcat onder KeeperConvert.
  *
  * Met `--es ids 123,456` draait in plaats daarvan de echte keten (`ConvertJob`: plan, lezen via MediaStore, uitvoer in MediaStore) op die
  * MediaStore-ids, naar `--es folder Pictures/KeeperTest/` (standaard die map, nooit de echte uitvoermap). `--ez original false` leest
- * zonder `setRequireOriginal`, voor als de locatie-toestemming ontbreekt; de uitvoer heeft dan geen GPS.
+ * zonder `setRequireOriginal`, voor als de locatie-toestemming ontbreekt; de uitvoer heeft dan geen GPS. `--ez keephdr true` (in beide
+ * vormen) is HDR behouden: een Ultra HDR-bestand met de sterkte erin, in plaats van SDR; bij `ids` valt het anders terug op de instelling.
  */
 class ConvertDebugReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val pending = goAsync()
         intent.getStringExtra("ids")?.let { runJob(context, intent, it, pending); return }
+        intent.getStringExtra("inspect")?.let { inspect(context, it); pending.finish(); return }
         val name = intent.getStringExtra("in") ?: return
         val outName = intent.getStringExtra("out") ?: "uit.jpg"
         val q = intent.getIntExtra("q", 92)
         val tone = ToneMap.of(intent.getStringExtra("tonemap") ?: "normaal")
         val chroma420 = intent.getStringExtra("chroma") != "444"
         val strength = intent.getIntExtra("strength", 100).coerceIn(0, 100) / 100f
+        val keepHdr = intent.getBooleanExtra("keephdr", false)
         thread(name = "convert-debug") {
             try {
                 val input = File(context.filesDir, name)
                 val output = File(context.filesDir, outName)
                 val res = BufferedOutputStream(output.outputStream(), 1 shl 16).use { out ->
-                    Converter(log = { Log.i(TAG, it) }).convert(
-                        source = { ParcelFileDescriptor.open(input, ParcelFileDescriptor.MODE_READ_ONLY) },
+                    val converter = Converter(log = { Log.i(TAG, it) })
+                    val settings = ConvertSettings(q, tone, chroma420, strength, keepHdr)
+                    val source = JpegSource { ParcelFileDescriptor.open(input, ParcelFileDescriptor.MODE_READ_ONLY) }
+                    if (settings.keepsHdr) converter.keepHdr(source, out, settings, File(context.cacheDir, "keep-debug.tmp"))
+                    else converter.convert(
+                        source = source,
                         out = out,
-                        settings = ConvertSettings(q, tone, chroma420, strength),
+                        settings = settings,
                         segmentsFor = { head, _, _ -> head.icc()?.let { JpegSegments.icc(it) } ?: emptyList() },
                         onProgress = {},
                     )
@@ -58,17 +67,36 @@ class ConvertDebugReceiver : BroadcastReceiver() {
         }
     }
 
+    /** `--es inspect uit.jpg`: wat Android zelf van het bestand maakt (ImageDecoder, gain map en zijn waarden), in logcat onder KeeperConvert. */
+    private fun inspect(context: Context, name: String) {
+        try {
+            val file = File(context.filesDir, name)
+            val bitmap = ImageDecoder.decodeBitmap(ImageDecoder.createSource(file)) { decoder, _, _ -> decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE }
+            val gm = bitmap.gainmap
+            if (gm == null) Log.i(TAG, "INSPECT $name ${bitmap.width}x${bitmap.height} geen gain map, ruimte ${bitmap.colorSpace?.name}")
+            else {
+                fun f(v: FloatArray) = v.joinToString(",") { "%.4f".format(it) }
+                Log.i(TAG, "INSPECT $name ${bitmap.width}x${bitmap.height} ruimte ${bitmap.colorSpace?.name} gainmap ${gm.gainmapContents.width}x${gm.gainmapContents.height} " +
+                    "ratioMin=${f(gm.ratioMin)} ratioMax=${f(gm.ratioMax)} gamma=${f(gm.gamma)} epsSdr=${f(gm.epsilonSdr)} epsHdr=${f(gm.epsilonHdr)} " +
+                    "fullHdr=${"%.4f".format(gm.displayRatioForFullHdr)} minHdr=${"%.4f".format(gm.minDisplayRatioForHdrTransition)}")
+            }
+        } catch (t: Throwable) {
+            Log.e(TAG, "INSPECT MISLUKT $name", t)
+        }
+    }
+
     private fun runJob(context: Context, intent: Intent, ids: String, pending: PendingResult) {
         val only = ids.split(',').mapNotNull { it.trim().toLongOrNull() }.toSet()
         val folder = intent.getStringExtra("folder") ?: "Pictures/KeeperTest/"
         val original = intent.getBooleanExtra("original", true)
+        val keepHdr = if (intent.hasExtra("keephdr")) intent.getBooleanExtra("keephdr", false) else null
         thread(name = "convert-job-debug") {
             try {
                 val graph = context.applicationContext.graph
                 val report = runBlocking {
                     ConvertJob(context.applicationContext, graph.prefs, graph.scanner).run(
                         { Log.i(TAG, "voortgang ${it.index}/${it.total} ${it.name} ${(it.fraction * 100).toInt()}%") }, { false },
-                        ConvertOptions(only, folder, original),
+                        ConvertOptions(only, folder, original, keepHdr = keepHdr),
                     )
                 }
                 Log.i(TAG, "JOB converted=${report.converted} copied=${report.copied} skipped=${report.skipped} paused=${report.paused} left=${report.left} problem=${report.problem} in=${report.bytesIn} out=${report.bytesOut}")

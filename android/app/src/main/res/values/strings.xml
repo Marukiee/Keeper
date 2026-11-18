@@ -223,6 +223,8 @@
     <string name="convert_need_location">Keeper needs access to the location of your photos, or the GPS data is lost. Allow it in the settings of Keeper.</string>
     <string name="settings_hdr_strength">HDR strength</string>
     <string name="settings_hdr_strength_body" formatted="false">How much of the camera\'s HDR counts. 100% is the full HDR, 0% is the camera\'s own SDR version. You can set it per photo too.</string>
+    <string name="settings_keep_hdr">Keep HDR</string>
+    <string name="settings_keep_hdr_sub">The photo stays an HDR photo (Ultra HDR) and only gets smaller. On an HDR screen you see the extra brightness, apps that do not know HDR show the normal version. Off: an SDR photo made with the tone map below.</string>
     <string name="hdr_strength_percent">%1$d%%</string>
     <string name="hdr_strength_sdr">SDR</string>
     <string name="hdr_strength_hdr">HDR</string>
