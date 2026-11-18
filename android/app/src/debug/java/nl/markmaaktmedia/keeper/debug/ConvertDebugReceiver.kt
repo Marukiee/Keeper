@@ -10,6 +10,7 @@ import android.util.Log
 import java.io.BufferedOutputStream
 import java.io.File
 import kotlin.concurrent.thread
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import nl.markmaaktmedia.keeper.convert.ConvertJob
 import nl.markmaaktmedia.keeper.convert.ConvertOptions
@@ -30,12 +31,14 @@ import nl.markmaaktmedia.keeper.scan.ToneMap
  * Met `--es ids 123,456` draait in plaats daarvan de echte keten (`ConvertJob`: plan, lezen via MediaStore, uitvoer in MediaStore) op die
  * MediaStore-ids, naar `--es folder Pictures/KeeperTest/` (standaard die map, nooit de echte uitvoermap). `--ez original false` leest
  * zonder `setRequireOriginal`, voor als de locatie-toestemming ontbreekt; de uitvoer heeft dan geen GPS. `--ez keephdr true` (in beide
- * vormen) is HDR behouden: een Ultra HDR-bestand met de sterkte erin, in plaats van SDR; bij `ids` valt het anders terug op de instelling.
+ * vormen) is HDR behouden; `--ez forcehide true` (bij `ids`) zet de originelen van die run klaar voor verbergen (zie `hideop`);
+ * `--es hideop set|pending|verify|clear` test Originelen verbergen. HDR behouden: een Ultra HDR-bestand met de sterkte erin, in plaats van SDR; bij `ids` valt het anders terug op de instelling.
  */
 class ConvertDebugReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val pending = goAsync()
         intent.getStringExtra("ids")?.let { runJob(context, intent, it, pending); return }
+        intent.getStringExtra("hideop")?.let { hideOp(context, it, intent, pending); return }
         intent.getStringExtra("inspect")?.let { inspect(context, it); pending.finish(); return }
         intent.getStringExtra("hdrpreview")?.let { hdrPreview(context, it, intent.getIntExtra("strength", 100).coerceIn(0, 100) / 100f); pending.finish(); return }
         val name = intent.getStringExtra("in") ?: return
@@ -65,6 +68,30 @@ class ConvertDebugReceiver : BroadcastReceiver() {
                 Log.i(TAG, "KLAAR ${res.width}x${res.height} piek=${res.peak} gain=${res.gainMapSize} ruimte=${res.colorSpace} ${res.millis} ms, uitvoer ${output.length()} bytes")
             } catch (t: Throwable) {
                 Log.e(TAG, "MISLUKT", t)
+            } finally {
+                pending.finish()
+            }
+        }
+    }
+
+    /**
+     * Originelen verbergen testen: `--es hideop set --ez on true` zet de instelling, `pending` toont wat klaarstaat, `verify` controleert dat zonder iets te
+     * verbergen, `clear` leegt de lijst. Uitslag in logcat onder KeeperConvert (HIDEOP).
+     */
+    private fun hideOp(context: Context, op: String, intent: Intent, pending: PendingResult) {
+        thread(name = "hide-debug") {
+            try {
+                val graph = context.applicationContext.graph
+                runBlocking {
+                    when (op) {
+                        "set" -> { graph.prefs.setHideOriginals(intent.getBooleanExtra("on", false)); Log.i(TAG, "HIDEOP set ${intent.getBooleanExtra("on", false)}") }
+                        "pending" -> Log.i(TAG, "HIDEOP pending ${graph.prefs.pendingHide.first()}")
+                        "verify" -> graph.hider.verify().let { b -> Log.i(TAG, "HIDEOP verify ready=${b.ready.map { it.name }} dropped=${b.dropped} canManage=${graph.hider.canManageMedia}") }
+                        "clear" -> { graph.prefs.removePendingHide(graph.prefs.pendingHide.first().mapNotNull { nl.markmaaktmedia.keeper.convert.HideEntry.decode(it)?.originalId }.toSet()); Log.i(TAG, "HIDEOP clear") }
+                    }
+                }
+            } catch (t: Throwable) {
+                Log.e(TAG, "HIDEOP MISLUKT $op", t)
             } finally {
                 pending.finish()
             }
@@ -112,13 +139,14 @@ class ConvertDebugReceiver : BroadcastReceiver() {
         val folder = intent.getStringExtra("folder") ?: "Pictures/KeeperTest/"
         val original = intent.getBooleanExtra("original", true)
         val keepHdr = if (intent.hasExtra("keephdr")) intent.getBooleanExtra("keephdr", false) else null
+        val forceHide = intent.getBooleanExtra("forcehide", false)
         thread(name = "convert-job-debug") {
             try {
                 val graph = context.applicationContext.graph
                 val report = runBlocking {
                     ConvertJob(context.applicationContext, graph.prefs, graph.scanner).run(
                         { Log.i(TAG, "voortgang ${it.index}/${it.total} ${it.name} ${(it.fraction * 100).toInt()}%") }, { false },
-                        ConvertOptions(only, folder, original, keepHdr = keepHdr),
+                        ConvertOptions(only, folder, original, keepHdr = keepHdr, forceHide = forceHide),
                     )
                 }
                 Log.i(TAG, "JOB converted=${report.converted} copied=${report.copied} skipped=${report.skipped} paused=${report.paused} left=${report.left} problem=${report.problem} in=${report.bytesIn} out=${report.bytesOut}")

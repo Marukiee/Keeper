@@ -1,6 +1,7 @@
 package nl.markmaaktmedia.keeper.convert
 
 import android.Manifest
+import android.content.ContentUris
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.ParcelFileDescriptor
@@ -33,6 +34,8 @@ class ConvertOptions(
     val only: Set<Long>? = null, val folder: String? = null, val readOriginal: Boolean = true, val newVersion: Boolean = false,
     /** Alleen voor de debug-ontvanger: HDR behouden aan of uit, los van de instelling. Null is wat in de instellingen staat. */
     val keepHdr: Boolean? = null,
+    /** Alleen voor de debug-ontvanger: de originelen van deze run toch voor verbergen klaarzetten, ook bij een test of "alleen deze foto". */
+    val forceHide: Boolean = false,
 )
 
 /** Waar de run mee bezig is. [index] telt vanaf 1; [fraction] is hoever die ene foto is (0 tot 1). [item] en [how] zijn voor het scherm: welke foto, en wat ermee gebeurt. */
@@ -56,6 +59,8 @@ class ConvertReport(
     val problem: Problem? = null,
     /** Hoe de nieuwe bestanden heten (voor het verslag). */
     val written: List<String> = emptyList(),
+    /** Van zoveel originelen is de uitvoer klaar en staan ze klaar om verborgen te worden (zie [OriginalsHider]); alleen als dat aanstaat. */
+    val hideQueued: Int = 0,
 ) {
     enum class Problem { NoLocationAccess }
     val done get() = converted + copied
@@ -108,12 +113,16 @@ class ConvertJob(private val context: Context, private val prefs: KeeperPrefs, p
         // De HDR-sterkte: de standaard uit Instellingen, of wat Mark voor deze ene foto instelde (per bestandsnaam van het origineel).
         val defaultStrength = prefs.hdrStrength.first()
         val strengthByName = prefs.hdrStrengthByName.first()
+        // Originelen verbergen (instelling): alleen na een hele run telt wat klaar is, zie OriginalsHiding.eligible. De controle zelf komt later, vlak voor het verbergen.
+        val hideOn = prefs.hideOriginals.first()
+        val wholeRun = options.forceHide || (options.only == null && options.folder == null && !options.newVersion)
 
         work.deleteRecursively(); work.mkdirs()
         store.removeLeftovers(folder)
 
         var converted = 0
         var copied = 0
+        var hideQueued = 0
         val written = ArrayList<String>()
         // Wat al in de uitvoermap staat, is eerder gedaan en blijft met rust; wat Mark daaruit verwijderd heeft, is hier geen Klaar meer en komt dus weer aan de beurt.
         val alreadyDone = photos.count { it.status == Status.Done }
@@ -136,6 +145,12 @@ class ConvertJob(private val context: Context, private val prefs: KeeperPrefs, p
                 bytesIn += result.bytesIn
                 bytesOut += result.bytesOut
                 written += step.outName
+                if (hideOn && OriginalsHiding.eligible(step.photo, step.how, wholeRun)) {
+                    val item = step.photo.item
+                    val keptHdr = step.how == How.Convert && !result.copiedAsIs && settings.withStrength(strength).keepsHdr
+                    prefs.addPendingHide(listOf(HideEntry(item.id, item.name, item.size, result.outputId, result.bytesOut, keptHdr).encode()))
+                    hideQueued++
+                }
             } catch (_: AlreadyThere) {
                 skipped++
             } catch (e: CancellationException) {
@@ -149,13 +164,13 @@ class ConvertJob(private val context: Context, private val prefs: KeeperPrefs, p
             }
         }
         work.deleteRecursively()
-        ConvertReport(converted, copied, skipped, failures, stopped, left, bytesIn, bytesOut, written = written)
+        ConvertReport(converted, copied, skipped, failures, stopped, left, bytesIn, bytesOut, written = written, hideQueued = hideQueued)
     }
 
     /** De naam stond er net al (een andere run of app was sneller): overslaan, geen fout. */
     private class AlreadyThere : Exception()
 
-    private class Written(val bytesIn: Long, val bytesOut: Long, val copiedAsIs: Boolean)
+    private class Written(val bytesIn: Long, val bytesOut: Long, val copiedAsIs: Boolean, val outputId: Long = -1)
 
     private fun writeOne(step: Step, folder: String, settings: ConvertSettings, cancelled: () -> Boolean, progress: (Float) -> Unit): Written {
         val item = step.photo.item
@@ -176,7 +191,7 @@ class ConvertJob(private val context: Context, private val prefs: KeeperPrefs, p
             }
             if (counted.count == 0L) throw java.io.IOException("leeg resultaat")
             store.finish(target)
-            return Written(written.bytesIn, counted.count, written.copiedAsIs)
+            return Written(written.bytesIn, counted.count, written.copiedAsIs, ContentUris.parseId(target))
         } catch (e: Throwable) {
             store.abort(target)
             throw e

@@ -35,6 +35,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -90,6 +92,27 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
         }
     }
 
+    // Originelen verbergen (instelling, standaard uit): wat de laatste run klaarzette gaat na controle naar de prullenbak, met één verzoek aan Android voor het
+    // hele pakket (met een bevestiging, of zonder als Keeper mediabeheer heeft). Dat kan alleen terwijl de app vooraan staat (de bevestiging is een scherm); wat dan nog klaarstaat,
+    // komt aan de beurt zodra de app weer vooraan komt. Weigert Mark de bevestiging, dan vragen we er niet opnieuw om; de originelen blijven gewoon staan.
+    val hider = context.graph.hider
+    val hideOn by context.graph.prefs.hideOriginals.collectAsState(initial = false)
+    val hideScope = rememberCoroutineScope()
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    var hideAsked by remember { mutableStateOf<List<nl.markmaaktmedia.keeper.convert.HideEntry>>(emptyList()) }
+    var hideCheck by remember { mutableIntStateOf(0) }
+    val hideLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
+        val asked = hideAsked
+        val hidden = result.resultCode == android.app.Activity.RESULT_OK
+        // Eerst van de lijst af, pas daarna weer vrijgeven: de app komt direct na het sluiten van de dialoog weer vooraan (ON_RESUME) en zou anders de nog
+        // niet geschrapte regels opnieuw voorleggen.
+        hideScope.launch {
+            hider.finished(asked)
+            hideAsked = emptyList()
+            if (hidden) vm.refresh()
+        }
+    }
+
     // Omzetten: de locatie van de foto's en meldingen (voortgang, verslag) vragen we vlak voor de eerste run. Zonder locatie begint hij niet,
     // want dan zou Android de GPS-gegevens uit elk bestand halen en kwamen ze niet in de uitvoer.
     val converter = context.graph.converter
@@ -116,9 +139,18 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
     val paused by context.graph.prefs.convertPaused.collectAsState(initial = false)
     // Zodra een run klaar is, staat er misschien van alles anders in de uitvoermap: opnieuw kijken.
     LaunchedEffect(convertState is ConvertState.Finished) { if (convertState is ConvertState.Finished && permitted) vm.refresh() }
+    LaunchedEffect(hideOn, permitted, hideCheck, convertState is ConvertState.Finished) {
+        if (!hideOn || !permitted || hideAsked.isNotEmpty() || convertState is ConvertState.Running) return@LaunchedEffect
+        if (!lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return@LaunchedEffect
+        val batch = hider.verify()
+        if (batch.ready.isEmpty()) return@LaunchedEffect
+        hideAsked = batch.ready
+        hideLauncher.launch(IntentSenderRequest.Builder(hider.request(batch.ready)).build())
+    }
 
     // Elke keer dat de app weer vooraan komt: opnieuw kijken, want er kunnen foto's bij zijn gekomen.
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        hideCheck++
         permitted = granted(context)
         if (permitted) vm.refresh()
     }

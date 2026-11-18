@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.content.Context
 import androidx.core.app.NotificationManagerCompat
 import nl.markmaaktmedia.keeper.convert.ConvertRepository
+import nl.markmaaktmedia.keeper.convert.OriginalsHider
 import nl.markmaaktmedia.keeper.data.KeeperPrefs
 import nl.markmaaktmedia.keeper.scan.MediaScanner
 import nl.markmaaktmedia.keeper.update.UpdateRepository
@@ -16,6 +17,7 @@ class Graph(context: Context) {
     val updater = UpdateRepository(context, prefs)
     val scanner = MediaScanner(context, prefs)
     val converter = ConvertRepository(context.applicationContext, prefs, scanner)
+    val hider = OriginalsHider(context.applicationContext, prefs)
 }
 
 class KeeperApp : Application() {

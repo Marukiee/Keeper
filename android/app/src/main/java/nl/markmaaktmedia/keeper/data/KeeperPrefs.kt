@@ -41,6 +41,8 @@ class KeeperPrefs(private val context: Context) {
         val hdrStrength = intPreferencesKey("hdr_strength")
         val hdrStrengthByName = stringSetPreferencesKey("hdr_strength_by_name")
         val keepHdr = booleanPreferencesKey("keep_hdr")
+        val hideOriginals = booleanPreferencesKey("hide_originals")
+        val pendingHide = stringSetPreferencesKey("pending_hide")
         val lookDefault = stringPreferencesKey("look_default")
         val themeMode = stringPreferencesKey("theme_mode")
         val seed = stringPreferencesKey("seed")
@@ -150,6 +152,21 @@ class KeeperPrefs(private val context: Context) {
      */
     val keepHdr: Flow<Boolean> = data.map { it[K.keepHdr] ?: false }.distinctUntilChanged()
     suspend fun setKeepHdr(on: Boolean) = edit { it[K.keepHdr] = on }
+
+    /**
+     * Originelen verbergen: na een gelukte omzetting gaan de camera-JPG's waarvan de uitvoer klopt naar de prullenbak van de Galerij (zie
+     * [nl.markmaaktmedia.keeper.convert.OriginalsHider]). Standaard uit; Mark zet het zelf aan.
+     */
+    val hideOriginals: Flow<Boolean> = data.map { it[K.hideOriginals] ?: false }.distinctUntilChanged()
+    suspend fun setHideOriginals(on: Boolean) = edit { it[K.hideOriginals] = on }
+
+    /** Originelen die verborgen mogen worden zodra de app ze gecontroleerd heeft (zie [nl.markmaaktmedia.keeper.convert.HideEntry]); overleeft het sluiten van de app. */
+    val pendingHide: Flow<Set<String>> = data.map { it[K.pendingHide] ?: emptySet() }.distinctUntilChanged()
+    suspend fun addPendingHide(lines: Collection<String>) = edit { it[K.pendingHide] = (it[K.pendingHide] ?: emptySet()) + lines }
+    /** Haalt de regels van deze originelen (MediaStore-ids) weg: verborgen, afgekeurd of niet meer nodig. */
+    suspend fun removePendingHide(originalIds: Set<Long>) = edit {
+        it[K.pendingHide] = (it[K.pendingHide] ?: emptySet()).filterNot { line -> line.substringBefore('|').toLongOrNull() in originalIds }.toSet()
+    }
 
     /** Preset die Lightroom over een RAW krijgt als de camera-JPG ernaast niet zegt welke het was ("" is geen). Zie `LookPreset`. */
     val lookDefault: Flow<String> = data.map { it[K.lookDefault] ?: "" }

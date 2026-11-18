@@ -223,6 +223,12 @@
     <string name="settings_hdr_strength_body" formatted="false">Hoeveel van de HDR van de camera meetelt. 100% is de volle HDR, 0% de SDR-versie van de camera. Per foto kan het ook.</string>
     <string name="settings_keep_hdr">HDR behouden</string>
     <string name="settings_keep_hdr_sub">De foto blijft een HDR-foto (Ultra HDR) en wordt alleen kleiner. Op een HDR-scherm zie je de extra helderheid, apps die geen HDR kennen tonen de gewone versie. Uit: een SDR-foto met de tone map hieronder.</string>
+    <string name="settings_hide_originals">Originelen verbergen</string>
+    <string name="settings_hide_originals_sub">Is de omzetting gelukt en klopt de uitvoer, dan gaat het origineel naar de prullenbak van je Galerij: geen dubbele foto\'s meer in je feed. Alleen JPG\'s uit DCIM, nooit RAW\'s, Lightroom-exports of bewerkingen. Android haalt het na de bewaartermijn van de prullenbak zelf weg (meestal 30 dagen); tot dan kun je het terugzetten.</string>
+    <string name="settings_hide_originals_warn_title">Let op</string>
+    <string name="settings_hide_originals_warn">Zonder HDR behouden is de HDR van het origineel weg zodra het uit de prullenbak verdwijnt: Immich bewaart alleen de Keeper-map. En zolang het origineel in de prullenbak staat, kun je die foto in Keeper niet opnieuw omzetten of een andere HDR-sterkte geven; zet hem eerst terug in de Galerij.</string>
+    <string name="settings_manage_media">Zonder bevestiging verbergen</string>
+    <string name="settings_manage_media_sub">Geef Keeper toegang tot mediabeheer, dan hoeft Android niet elke keer te vragen. Dat zet je zelf aan in de systeeminstellingen.</string>
     <string name="hdr_strength_percent">%1$d%%</string>
     <string name="hdr_strength_sdr">SDR</string>
     <string name="hdr_strength_hdr">HDR</string>

@@ -129,6 +129,16 @@ Android van een bestand maakt. Een bestaande uitvoer verandert niet door een and
 Voorbeeld bij HDR behouden (`HdrPreview`, API 34+; eronder valt het voorbeeld weg): de schuif in de viewer laat dan de HDR zelf zien in plaats van de SDR-omzetting. `HdrPreview.open` laat Android de foto één keer decoderen (`ImageDecoder`, software, verkleind tot een lange kant van 1000 tot 2000 px, met gain map; 1 tot 2 s bij 200 MP),
 `render(sterkte)` maakt per stap een kopie van de pixels met een nieuwe `Gainmap` (zelfde beelddata, `ratioMin/Max` tot de macht sterkte, `epsilonHdr` naar `epsilonSdr` geschoven, de rest gelijk), 3 ms. Het scherm tekent er pas HDR van als het venster in HDR-modus staat: `ViewerScreen` zet `window.colorMode = COLOR_MODE_HDR` alleen zolang het paneel open is
 (`hdrShown`) en zet het daarna terug. De gain-map-waarden van het voorbeeld zijn op de emulator gecontroleerd (ratioMax 4,9261 / 2,2195 / 1,0 bij 100 / 50 / 0%, gelijk aan wat `ImageDecoder` van het echte uitvoerbestand zegt); of het er op het scherm van de Oppo ook goed uitziet, kan alleen daar bekeken worden (de emulator toont geen HDR).
+
+Originelen verbergen (2026-11-18, `OriginalsHiding`, `OriginalsHider`, `HideEntry`; instelling `hideOriginals`, standaard uit): Mark wil een schone feed zonder dubbele foto's. `ConvertJob` zet per gelukte foto een `HideEntry` klaar in de instellingen (`pendingHide`: id en grootte van het origineel,
+id en grootte van de uitvoer, of de uitvoer Ultra HDR is) als `OriginalsHiding.eligible`: alleen camera-JPG's (status Convert of AsIs, hoe Convert of Copy) uit `DCIM/` die geen favoriet zijn, en alleen in een hele run (niet bij "alleen deze foto", "nieuwe versie" of een testmap: dan is Mark nog aan het uitproberen). Nooit een DNG
+(de camera-versie vervangt de RAW niet), nooit een Lightroom-export of Galerij-bewerking. De app (niet de service; het verzoek is een scherm) pakt de lijst op zodra hij vooraan staat (na een run, en bij elke `ON_RESUME`; `AppRoot`, `hideCheck`) en laat `OriginalsHider.verify` elk item opnieuw controleren: uitvoer
+bestaat, is niet meer pending, even groot als geschreven en niet leeg, decodeert op de afmetingen van het origineel (ook gedraaid), bij HDR behouden nog een gain map (`UltraHdrReader`); origineel heeft nog dezelfde naam en grootte, staat nog in DCIM en is geen favoriet. Wat niet klopt, gaat van de lijst en blijft staan. De rest gaat in één
+`MediaStore.createTrashRequest` naar de prullenbak: Android vraagt één bevestiging per pakket ("Allow Keeper to move this photo to trash?"), of geen als Keeper de speciale toegang Mediabeheer heeft (manifest `MANAGE_MEDIA`; Instellingen toont dan een rij die naar de systeempagina "Media management apps" gaat). Een directe `update` van `IS_TRASHED` mag
+ook mét Mediabeheer niet op andermans bestanden ("has no access", op de emulator geprobeerd), dus dat bestaat niet. Weigert Mark de bevestiging, dan gaan de regels van de lijst en vraagt Keeper er niet opnieuw om (eerst van de lijst af en dan pas `hideAsked` vrijgeven: anders kwam er na het sluiten van de dialoog een tweede). Gevolgen die in de
+instellingstekst staan: zonder HDR behouden is de HDR van het origineel na het legen van de prullenbak voorgoed weg (Immich bewaart alleen de Keeper-map); een origineel in de prullenbak staat niet meer in de scanner, dus "Nieuwe versie maken" en een andere HDR-sterkte kunnen dan niet meer tot het is teruggezet. Op de emulator gecontroleerd
+(originelen van `com.android.shell`, zoals de camera's bestanden): controle slaagt, een ontbrekende uitvoer geeft een afvallend item, de dialoog met Deny (niets verborgen, lijst leeg, geen tweede dialoog) en Allow (bestand wordt `.trashed-<verloop>-naam`, verloop precies 30 dagen later, lijst leeg), en met `appops set ... MANAGE_MEDIA allow` verschijnt geen dialoog.
+Niet gecontroleerd: hoe de Galerij van de Oppo (ColorOS) de MediaStore-prullenbak toont ("Recent verwijderd") en hoe lang die het bewaart, en of Mediabeheer op ColorOS 16 beschikbaar is; dat kan alleen op de telefoon. Testen op de emulator: `--ez forcehide true` bij `ids` en `--es hideop set|pending|verify|clear` (debug-ontvanger).
 `Converter` gebruikt dezelfde `ConvertCore`; de uitvoer bij 100% is byte voor byte gelijk aan die van voor de verplaatsing (gemeten op de emulator). Gemeten op de 70 MP-foto van 17 november (154231): bij 0% is de uitvoer de camera-SDR (gemiddeld verschil 0,5 code,
 alleen JPEG-ruis), bij 50% ertussen. Debug: `ConvertDebugReceiver` neemt `--ei strength 0..100`.
 
@@ -154,18 +164,23 @@ zonder hartje naar de prullenbak; RAW's, exports, bewerkingen en hun originelen 
 
 ## Harde regels
 
-- Nooit iets automatisch verwijderen, ook niet op de telefoon. Enige uitzondering (Mark, 2026-11-16): niet-bewaarde RAW's na een
+- Nooit iets automatisch verwijderen, ook niet op de telefoon. Twee uitzonderingen. (1) Mark, 2026-11-16: niet-bewaarde RAW's na een
   instelbare termijn. Daar komt eerst een notificatie van; er gaat pas iets naar de prullenbak nadat Mark in de app de lijst heeft
-  bekeken en bevestigd heeft (plus Android's eigen bevestiging). Nog niet gebouwd.
+  bekeken en bevestigd heeft (plus Android's eigen bevestiging). Nog niet gebouwd. (2) Mark, 2026-11-18, gebouwd: "Originelen verbergen"
+  (Instellingen > Omzetten, standaard UIT, Mark zet het zelf aan): na een hele run gaan de camera-JPG's uit DCIM waarvan de uitvoer klopt
+  naar de prullenbak van MediaStore (nooit zelf wissen; Android haalt ze na 30 dagen weg, tot dan terug te zetten). Voorwaarden staan bij
+  "Originelen verbergen" hieronder; ze zijn bewust smal en horen smal te blijven.
 - Geen accessibility service (Triodos ziet de telefoon dan als geroot).
 - Op de telefoon installeren alleen met Mark's OK.
 - Alleen zwaar werk tijdens het opladen, tenzij Mark de knop toch indrukt (WorkManager plus voortgangsnotificatie).
 - 50 MP en 200 MP in tegels verwerken; nooit een volledige float-buffer.
 - Overslaan: `.trashed-*` en `DCIM/Immich`. Galerij-bewerkingen herkennen aan `IMG_YYYYMMDD_HHMMSS.jpg`.
 - Metadata: behouden GPS, DateTimeOriginal, SubSecTimeOriginal, OffsetTimeOriginal, orientation, make, model,
-  lens en het ICC-profiel (Display P3). Weg: hdrgm-XMP, MPF/gain map, GContainer, het APP2-segment ISO 21496-1 (`urn:iso:std:iso:ts:21496:-1`, anders
-  zien viewers de foto nog als HDR), oude thumbnail, OnePlus-trailer. Neem APP-segmenten nooit blind over uit de bron.
-  Verplichte test: exiftool-diff op de Mac, origineel tegen resultaat.
+  lens en het ICC-profiel (Display P3). In de SDR-uitvoer (HDR behouden uit) weg: hdrgm-XMP, MPF/gain map, GContainer, het APP2-segment
+  ISO 21496-1 (`urn:iso:std:iso:ts:21496:-1`, anders zien viewers de foto nog als HDR), oude thumbnail, OnePlus-trailer. Met HDR behouden
+  AAN horen de XMP/container, het ISO-blok, de MPF en de gain map er juist in (zie "HDR behouden"); dat is geen fout. Neem APP-segmenten
+  nooit blind over uit de bron: `OutputMetadata` bouwt ze (Exif en ICC uit de bron, de rest nieuw).
+  Verplichte test: exiftool-diff op de Mac, origineel tegen resultaat (voor HDR behouden gedaan op 2026-11-18: Exif, GPS en ICC identiek).
 
 ## Prototype (`prototype/`)
 

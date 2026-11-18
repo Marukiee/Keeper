@@ -16,6 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
@@ -37,6 +38,7 @@ import nl.markmaaktmedia.keeper.ui.components.HdrStrengthSlider
 import nl.markmaaktmedia.keeper.ui.components.InfoRow
 import nl.markmaaktmedia.keeper.ui.components.SectionHeader
 import nl.markmaaktmedia.keeper.ui.components.SegmentedPillRow
+import nl.markmaaktmedia.keeper.ui.components.NoteRow
 import nl.markmaaktmedia.keeper.ui.components.SettingsGroup
 import nl.markmaaktmedia.keeper.ui.components.SwitchRow
 import nl.markmaaktmedia.keeper.ui.formatBytes
@@ -125,6 +127,12 @@ internal fun ConvertPage(onBack: () -> Unit, contentPadding: PaddingValues) {
     val toneMapId by prefs.toneMap.collectAsState(initial = "normaal")
     val toneMap = ToneMap.of(toneMapId)
     val keepHdr by prefs.keepHdr.collectAsState(initial = false)
+    val hideOriginals by prefs.hideOriginals.collectAsState(initial = false)
+    val context = LocalContext.current
+    val hider = context.graph.hider
+    // Mediabeheer zet Mark in de systeeminstellingen aan; bij terugkomen opnieuw kijken.
+    var canManage by remember { mutableStateOf(hider.canManageMedia) }
+    androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_RESUME) { canManage = hider.canManageMedia }
 
     val savedStrength by prefs.hdrStrength.collectAsState(initial = 100)
     // Tijdens het schuiven telt de schuif zelf; opgeslagen wordt bij loslaten.
@@ -164,6 +172,17 @@ internal fun ConvertPage(onBack: () -> Unit, contentPadding: PaddingValues) {
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+        }
+        SettingsGroup {
+            val rows = if (hideOriginals) (if (canManage) 2 else 3) else 1
+            SwitchRow(0, rows, KeeperIcons.Delete, stringResource(R.string.settings_hide_originals), stringResource(R.string.settings_hide_originals_sub), hideOriginals, { scope.launch { prefs.setHideOriginals(it) } })
+            if (hideOriginals) NoteRow(1, rows, KeeperIcons.Info, stringResource(R.string.settings_hide_originals_warn_title), stringResource(R.string.settings_hide_originals_warn))
+            if (hideOriginals && !canManage) ActionRow(
+                2, rows, KeeperIcons.OpenInNew, stringResource(R.string.settings_manage_media), stringResource(R.string.settings_manage_media_sub),
+                onClick = {
+                    context.startActivity(android.content.Intent(android.provider.Settings.ACTION_REQUEST_MANAGE_MEDIA, android.net.Uri.parse("package:${context.packageName}")))
+                },
+            )
         }
     }
 }
