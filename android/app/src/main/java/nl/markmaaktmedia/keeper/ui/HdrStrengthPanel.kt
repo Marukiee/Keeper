@@ -32,6 +32,8 @@ internal fun HdrStrengthPanel(
     hasOverride: Boolean,
     converting: Boolean,
     loading: Boolean,
+    /** Er is geen voorbeeld voor deze foto (de schuif werkt nog wel, voor de omzetting). */
+    missing: Boolean,
     onChange: (Int) -> Unit,
     onFinished: () -> Unit,
     onReset: () -> Unit,
@@ -47,6 +49,7 @@ internal fun HdrStrengthPanel(
             Column(Modifier.weight(1f)) {
                 Text(stringResource(R.string.viewer_hdr_strength), style = MaterialTheme.typography.titleMedium)
                 if (loading) Text(stringResource(R.string.hdr_strength_loading), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                else if (missing) Text(stringResource(R.string.hdr_strength_unavailable), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             SecondaryPillButton(stringResource(R.string.hdr_strength_done), onDone)
         }

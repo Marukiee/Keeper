@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.graphics.ImageDecoder
+import android.net.Uri
 import android.os.ParcelFileDescriptor
 import android.util.Log
 import java.io.BufferedOutputStream
@@ -15,6 +16,8 @@ import nl.markmaaktmedia.keeper.convert.ConvertOptions
 import nl.markmaaktmedia.keeper.convert.ConvertSettings
 import nl.markmaaktmedia.keeper.graph
 import nl.markmaaktmedia.keeper.convert.Converter
+import nl.markmaaktmedia.keeper.convert.HdrPreview
+import nl.markmaaktmedia.keeper.convert.hdrPreviewSupported
 import nl.markmaaktmedia.keeper.convert.JpegSource
 import nl.markmaaktmedia.keeper.convert.JpegSegments
 import nl.markmaaktmedia.keeper.scan.ToneMap
@@ -34,6 +37,7 @@ class ConvertDebugReceiver : BroadcastReceiver() {
         val pending = goAsync()
         intent.getStringExtra("ids")?.let { runJob(context, intent, it, pending); return }
         intent.getStringExtra("inspect")?.let { inspect(context, it); pending.finish(); return }
+        intent.getStringExtra("hdrpreview")?.let { hdrPreview(context, it, intent.getIntExtra("strength", 100).coerceIn(0, 100) / 100f); pending.finish(); return }
         val name = intent.getStringExtra("in") ?: return
         val outName = intent.getStringExtra("out") ?: "uit.jpg"
         val q = intent.getIntExtra("q", 92)
@@ -64,6 +68,24 @@ class ConvertDebugReceiver : BroadcastReceiver() {
             } finally {
                 pending.finish()
             }
+        }
+    }
+
+    /** `--es hdrpreview foto.jpg --ei strength 50`: het HDR-voorbeeld van de viewer (zie `HdrPreview`) en de gain map van wat het teruggeeft, in logcat. */
+    private fun hdrPreview(context: Context, name: String, strength: Float) {
+        try {
+            if (!hdrPreviewSupported) { Log.i(TAG, "HDRPREVIEW niet ondersteund op dit toestel"); return }
+            val t0 = System.nanoTime()
+            val preview = HdrPreview.open(context.contentResolver, Uri.fromFile(File(context.filesDir, name))) ?: run { Log.i(TAG, "HDRPREVIEW $name: geen voorbeeld"); return }
+            val t1 = System.nanoTime()
+            val bitmap = preview.render(strength)
+            val t2 = System.nanoTime()
+            val gm = bitmap.gainmap
+            fun f(v: FloatArray) = v.joinToString(",") { "%.4f".format(it) }
+            Log.i(TAG, "HDRPREVIEW $name ${bitmap.width}x${bitmap.height} open ${(t1 - t0) / 1_000_000} ms, render ${(t2 - t1) / 1_000_000} ms, gainmap " +
+                (if (gm == null) "ONTBREEKT" else "ratioMax=${f(gm.ratioMax)} ratioMin=${f(gm.ratioMin)} epsHdr=${f(gm.epsilonHdr)} fullHdr=${"%.4f".format(gm.displayRatioForFullHdr)}"))
+        } catch (t: Throwable) {
+            Log.e(TAG, "HDRPREVIEW MISLUKT $name", t)
         }
     }
 

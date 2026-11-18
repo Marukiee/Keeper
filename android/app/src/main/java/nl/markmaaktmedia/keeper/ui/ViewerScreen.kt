@@ -12,7 +12,9 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.rememberUpdatedState
+import android.os.Build
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
@@ -70,6 +72,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import nl.markmaaktmedia.keeper.convert.ConvertPreview
+import nl.markmaaktmedia.keeper.convert.HdrPreview
+import nl.markmaaktmedia.keeper.convert.hdrPreviewSupported
 import nl.markmaaktmedia.keeper.convert.ConvertSettings
 import nl.markmaaktmedia.keeper.convert.JpegSource
 import nl.markmaaktmedia.keeper.scan.MediaScanner
@@ -170,9 +174,13 @@ fun ViewerScreen(
     val strengthPrefs = context.graph.prefs
     val defaultStrength by strengthPrefs.hdrStrength.collectAsState(initial = 100)
     val strengthByName by strengthPrefs.hdrStrengthByName.collectAsState(initial = emptyMap())
+    // Met HDR behouden (instelling) toont het voorbeeld de HDR zelf met de gain map op die sterkte; anders wat de SDR-omzetting zou maken.
+    val keepHdr by strengthPrefs.keepHdr.collectAsState(initial = false)
+    val hdrPreview = keepHdr && hdrPreviewSupported
     var strengthOpen by remember { mutableStateOf(false) }
     var liveStrength by remember { mutableIntStateOf(100) }
     var previewBusy by remember { mutableStateOf(false) }
+    var previewMissing by remember { mutableStateOf(false) }
     val pager = rememberPagerState(initialPage = list.indexOfFirst { it.item.id == startId }.coerceAtLeast(0)) { list.size }
     var zoomed by remember { mutableStateOf(false) }
     // Naar beneden slepen sluit de foto, zoals in Immich: de foto blijft onder je vinger, ook zijwaarts en weer omhoog, en wordt kleiner
@@ -201,6 +209,15 @@ fun ViewerScreen(
     var openT by remember { mutableFloatStateOf(0f) }
     LaunchedEffect(pager.currentPage) { zoomed = false; strengthOpen = false }
     val current = list[pager.currentPage.coerceIn(0, list.lastIndex)]
+    // Een scherm laat HDR alleen zien als het venster in HDR-modus staat. Dat gaat aan zolang het HDR-voorbeeld zichtbaar is en daarna weer terug,
+    // want in HDR-modus kan de rest van het scherm er anders uitzien.
+    val hdrShown = strengthOpen && hdrPreview && current.hdr
+    val window = remember(context) { generateSequence(context) { (it as? android.content.ContextWrapper)?.baseContext }.firstNotNullOfOrNull { it as? android.app.Activity }?.window }
+    DisposableEffect(hdrShown, window) {
+        val before = window?.colorMode
+        if (hdrShown && window != null) window.colorMode = android.content.pm.ActivityInfo.COLOR_MODE_HDR
+        onDispose { if (hdrShown && window != null && before != null) window.colorMode = before }
+    }
     val currentId by rememberUpdatedState(current.item.id)
     // Tijdens het openen meldt het openen zelf de foto, op het moment dat de tegel leeg moet.
     LaunchedEffect(current.item.id) { if (!opening) onCurrent(current.item.id) }
@@ -379,7 +396,9 @@ fun ViewerScreen(
                 if (photo != null) ZoomablePhoto(
                     photo, active = page == pager.currentPage, onZoomed = { zoomed = it },
                     strengthPreview = if (strengthOpen && page == pager.currentPage && photo.hdr) liveStrength else null,
+                    hdrPreview = hdrPreview,
                     onPreviewBusy = { previewBusy = it },
+                    onPreviewMissing = { previewMissing = it },
                 )
             }
         }
@@ -389,6 +408,7 @@ fun ViewerScreen(
             hasOverride = strengthByName.containsKey(current.item.name) || liveStrength != defaultStrength,
             converting = converting,
             loading = previewBusy,
+            missing = previewMissing && !previewBusy,
             onChange = { liveStrength = it },
             onFinished = { val asked = current; scope.launch { strengthPrefs.setHdrStrengthFor(asked.item.name, liveStrength) } },
             onReset = { val asked = current; liveStrength = defaultStrength; scope.launch { strengthPrefs.setHdrStrengthFor(asked.item.name, null) } },
@@ -469,6 +489,29 @@ fun ViewerScreen(
 private class Hero(val bitmap: android.graphics.Bitmap, val from: Rect, val to: Rect)
 
 /**
+ * Het HDR-voorbeeld van HDR behouden: de foto één keer door Android laten decoderen (verkleind, met gain map, zie [HdrPreview]) en bij elke stap van
+ * [strength] (0 tot 100) een bitmap met de gain map op die sterkte. Tot de eerste klaar is, blijft het gewone beeld staan (null).
+ */
+@androidx.annotation.RequiresApi(34)
+@Composable
+private fun hdrLivePreview(id: Long, strength: Int?, onBusy: (Boolean) -> Unit, onMissing: (Boolean) -> Unit): ImageBitmap? {
+    val context = LocalContext.current
+    val session: HdrPreview? by produceState<HdrPreview?>(null, id) {
+        onBusy(true)
+        onMissing(false)
+        value = withContext(Dispatchers.IO) { HdrPreview.open(context.contentResolver, MediaScanner.imageUri(id)) }
+        onMissing(value == null)
+        onBusy(false)
+    }
+    val live: ImageBitmap? by produceState<ImageBitmap?>(null, session, strength) {
+        val s = session
+        if (s == null || strength == null) { value = null; return@produceState }
+        value = withContext(Dispatchers.Default) { s.render(strength / 100f) }.asImageBitmap()
+    }
+    return live
+}
+
+/**
  * Een foto die je kunt inzoomen. Eerst staat er een snel voorbeeld; zodra je inzoomt komt er een scherper beeld
  * (tot [DETAIL_EDGE] pixels) voor in de plaats, om de kwaliteit te beoordelen. Met één vinger veegt de pager door;
  * pas als er is ingezoomd, of met twee vingers, nemen we het gebaar over.
@@ -478,24 +521,31 @@ private fun ZoomablePhoto(
     photo: Photo, active: Boolean, onZoomed: (Boolean) -> Unit,
     /** Is dit gezet (0 tot 100), dan toont de foto wat de omzetting bij die HDR-sterkte zou maken, en beweegt mee als het getal verandert. */
     strengthPreview: Int? = null,
+    /** Met HDR behouden: het voorbeeld is de foto met zijn gain map (door Android getekend) in plaats van de SDR-omzetting. */
+    hdrPreview: Boolean = false,
     onPreviewBusy: (Boolean) -> Unit = {},
+    /** Het voorbeeld is er niet (de foto is niet te lezen als Ultra HDR); het paneel zegt dat. */
+    onPreviewMissing: (Boolean) -> Unit = {},
 ) {
     val context = LocalContext.current
     val scanner = context.graph.scanner
     val tone by context.graph.prefs.toneMap.collectAsState(initial = "normaal")
     val previewing = strengthPreview != null
     // Het voorbeeld wordt één keer gedecodeerd (verkleind) zodra het paneel opengaat; elke stap van de schuif rekent daarna alleen de tone map opnieuw.
-    val session: ConvertPreview? by produceState<ConvertPreview?>(null, photo.item.id, previewing) {
+    val sdrPreviewing = previewing && !hdrPreview
+    val session: ConvertPreview? by produceState<ConvertPreview?>(null, photo.item.id, sdrPreviewing) {
         value = null
-        if (previewing) {
+        if (sdrPreviewing) {
             onPreviewBusy(true)
+            onPreviewMissing(false)
             value = withContext(Dispatchers.IO) {
                 ConvertPreview.open(JpegSource { context.contentResolver.openFileDescriptor(MediaScanner.imageUri(photo.item.id), "r") ?: throw java.io.IOException("niet te openen") })
             }
+            onPreviewMissing(value == null)
             onPreviewBusy(false)
         }
     }
-    val live: ImageBitmap? by produceState<ImageBitmap?>(null, session, strengthPreview, tone) {
+    val sdrLive: ImageBitmap? by produceState<ImageBitmap?>(null, session, strengthPreview, tone) {
         val s = session
         val strength = strengthPreview
         if (s == null || strength == null) { value = null; if (strength == null) onPreviewBusy(false); return@produceState }
@@ -505,6 +555,7 @@ private fun ZoomablePhoto(
         value = s.render(ConvertSettings(90, ToneMap.of(tone), true, strength / 100f)).asImageBitmap()
         onPreviewBusy(false)
     }
+    val live = if (hdrPreview && previewing && Build.VERSION.SDK_INT >= 34) hdrLivePreview(photo.item.id, strengthPreview, onPreviewBusy, onPreviewMissing) else sdrLive
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
     var box by remember { mutableStateOf(IntSize.Zero) }
