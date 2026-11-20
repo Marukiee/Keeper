@@ -137,6 +137,15 @@ class ClassifierTest {
         assertEquals(Status.NeedsEdit, run(listOf(raw), done = setOf("IMG20261114133431.jpg"), keepAll = false)[raw.name])
     }
 
+    @Test fun anOutputWithSdrInItsNameIsDoneToo() {
+        val jpg = item("IMG20261114133431.jpg"); val raw = item("IMG20261114133432.dng")
+        val r = run(listOf(jpg, raw), done = setOf("IMG20261114133431-SDR.jpg", "IMG20261114133432-SDR.jpg"))
+        assertEquals(Status.Done, r[jpg.name]); assertEquals(Status.Done, r[raw.name])
+        // Een export is er niet klaar mee: die heet altijd -lr.
+        val export = item("IMG20261114133431.jpg", path = "Pictures/AdobeLightroom/")
+        assertEquals(Status.LightroomExport, run(listOf(export), done = setOf("IMG20261114133431-SDR.jpg"))[export.name])
+    }
+
     @Test fun lightroomExportIsDoneOnlyUnderItsOwnName() {
         val raw = item("IMG20261114133431.dng"); val export = item("IMG20261114133431.jpg", path = "Pictures/AdobeLightroom/")
         // De camera-versie van de RAW heet IMG...jpg; dat maakt de export niet klaar.

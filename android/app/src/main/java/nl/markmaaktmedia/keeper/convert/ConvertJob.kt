@@ -14,6 +14,7 @@ import nl.markmaaktmedia.keeper.data.KeeperPrefs
 import nl.markmaaktmedia.keeper.scan.Classifier
 import nl.markmaaktmedia.keeper.scan.MediaItem
 import nl.markmaaktmedia.keeper.scan.MediaScanner
+import nl.markmaaktmedia.keeper.scan.Photo
 import nl.markmaaktmedia.keeper.scan.Status
 import nl.markmaaktmedia.keeper.scan.ToneMap
 import java.io.File
@@ -103,7 +104,6 @@ class ConvertJob(private val context: Context, private val prefs: KeeperPrefs, p
         val photos = Classifier.classify(snapshot.items, snapshot.probes, skippedNames, kept, done, snapshot.lightroomFolder, prefs.rejected.first())
             .filter { only == null || it.item.id in only }
         val folder = OutputStore.folder(options.folder ?: prefs.outputFolder.first())
-        val plan = ConvertPlan.of(photos, snapshot.lightroomFolder, existing, options.newVersion)
         val settings = ConvertSettings(
             // Het gekozen "q94" is jpegli; onze encoder is libjpeg en geeft bij twee lager dezelfde grootte en kwaliteit (gemeten in fase 2).
             jpegQuality = (prefs.quality.first() - 2).coerceIn(50, 98),
@@ -113,6 +113,9 @@ class ConvertJob(private val context: Context, private val prefs: KeeperPrefs, p
         // De HDR-sterkte: de standaard uit Instellingen, of wat Mark voor deze ene foto instelde (per bestandsnaam van het origineel).
         val defaultStrength = prefs.hdrStrength.first()
         val strengthByName = prefs.hdrStrengthByName.first()
+        val strengthOf = { photo: Photo -> (strengthByName[photo.item.name] ?: defaultStrength) / 100f }
+        // Wat SDR wordt, krijgt `-SDR` in de naam. Dat hangt per foto af van HDR behouden én de sterkte (sterkte 0 valt terug op SDR), dus de planning vraagt het hier.
+        val plan = ConvertPlan.of(photos, snapshot.lightroomFolder, existing, options.newVersion) { photo -> !settings.withStrength(strengthOf(photo)).keepsHdr }
         // Originelen verbergen (instelling): alleen na een hele run telt wat klaar is, zie OriginalsHiding.eligible. De controle zelf komt later, vlak voor het verbergen.
         val hideOn = prefs.hideOriginals.first()
         val wholeRun = options.forceHide || (options.only == null && options.folder == null && !options.newVersion)
@@ -139,7 +142,7 @@ class ConvertJob(private val context: Context, private val prefs: KeeperPrefs, p
             val name = step.photo.item.name
             onProgress(ConvertProgress(i + 1, plan.steps.size, name, 0f, step.photo.item, step.how, alreadyDone))
             try {
-                val strength = (strengthByName[name] ?: defaultStrength) / 100f
+                val strength = strengthOf(step.photo)
                 val result = writeOne(step, folder, settings.withStrength(strength), cancelled) { onProgress(ConvertProgress(i + 1, plan.steps.size, name, it, step.photo.item, step.how, alreadyDone)) }
                 if (step.how == How.Copy || result.copiedAsIs) copied++ else converted++
                 bytesIn += result.bytesIn

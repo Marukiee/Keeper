@@ -101,4 +101,64 @@ class ConvertPlanTest {
         val plan = ConvertPlan.of(listOf(a, b), lightroom, emptySet())
         assertEquals(1, plan.steps.size); assertEquals(listOf(b), plan.clashes)
     }
+
+    // ---- -SDR aan het eind van de naam ----
+
+    @Test fun whatBecomesSdrGetsSdrAtTheEndOfItsName() {
+        assertEquals("IMG1-SDR.jpg", OutputName.of(item("IMG1.jpg"), lightroom, sdr = true))
+        assertEquals("IMG1-SDR.jpg", OutputName.of(item("IMG1.dng"), lightroom, sdr = true))
+        assertEquals("IMG_20261114_120713-SDR.jpg", OutputName.of(item("IMG_20261114_120713.jpg"), lightroom, sdr = true))
+        assertEquals("noext-SDR", OutputName.of(item("noext", mime = "image/jpeg"), lightroom, sdr = true))
+        // Een Lightroom-export gaat altijd zoals hij is mee: nooit SDR in de naam.
+        assertEquals("IMG1-lr.jpg", OutputName.of(item("IMG1.jpg", path = lightroom), lightroom, sdr = true))
+        // Zonder sdr is alles zoals het was.
+        assertEquals("IMG1.jpg", OutputName.of(item("IMG1.jpg"), lightroom))
+    }
+
+    @Test fun anOutputCanHaveTheOldNameOrTheSdrName() {
+        assertEquals(listOf("IMG1.jpg", "IMG1-SDR.jpg"), OutputName.candidates(item("IMG1.jpg"), lightroom))
+        assertEquals(listOf("IMG1.jpg", "IMG1-SDR.jpg"), OutputName.candidates(item("IMG1.dng"), lightroom))
+        assertEquals(listOf("IMG1-lr.jpg"), OutputName.candidates(item("IMG1.jpg", path = lightroom), lightroom))
+    }
+
+    @Test fun aNewVersionKeepsSdrAtTheEnd() {
+        assertEquals("IMG1-SDR.jpg", OutputName.versioned("IMG1-SDR.jpg", emptySet()))
+        assertEquals("IMG1-2-SDR.jpg", OutputName.versioned("IMG1-SDR.jpg", setOf("img1-sdr.jpg")))
+        assertEquals("IMG1-3-SDR.jpg", OutputName.versioned("IMG1-SDR.jpg", setOf("img1-sdr.jpg", "img1-2-sdr.jpg")))
+    }
+
+    @Test fun convertedPhotosGetSdrInTheNameAndCopiesKeepTheirName() {
+        val converted = photo(item("A.jpg"), Status.Convert, hdr = true)
+        val raw = photo(item("B.dng"), Status.CameraVersion)
+        val copy = photo(item("C.jpg"), Status.AsIs)
+        val export = photo(item("D.jpg", path = lightroom), Status.LightroomExport)
+        val steps = ConvertPlan.of(listOf(converted, raw, copy, export), lightroom, emptySet()) { true }.steps.associate { it.photo.item.name to it.outName }
+        assertEquals(mapOf("A.jpg" to "A-SDR.jpg", "B.dng" to "B-SDR.jpg", "C.jpg" to "C.jpg", "D.jpg" to "D-lr.jpg"), steps)
+    }
+
+    @Test fun withKeepHdrThePhotoKeepsItsNameButNotWhenItsStrengthIsZero() {
+        val a = photo(item("A.jpg"), Status.Convert, hdr = true)
+        val b = photo(item("B.jpg"), Status.Convert, hdr = true)
+        // De aanroeper zegt per foto of het SDR wordt: B heeft sterkte 0 en valt terug op SDR.
+        val steps = ConvertPlan.of(listOf(a, b), lightroom, emptySet()) { it === b }.steps.associate { it.photo.item.name to it.outName }
+        assertEquals(mapOf("A.jpg" to "A.jpg", "B.jpg" to "B-SDR.jpg"), steps)
+    }
+
+    @Test fun anOutputFromBeforeSdrStillCountsAsThere() {
+        val a = photo(item("IMG1.jpg"), Status.Convert, hdr = true)
+        // De oude naam staat er: niet nog eens omzetten onder de nieuwe.
+        val old = ConvertPlan.of(listOf(a), lightroom, setOf("IMG1.jpg")) { true }
+        assertTrue(old.steps.isEmpty()); assertEquals(listOf(a), old.existing)
+        // De nieuwe naam ook.
+        val fresh = ConvertPlan.of(listOf(a), lightroom, setOf("img1-sdr.jpg")) { true }
+        assertTrue(fresh.steps.isEmpty()); assertEquals(listOf(a), fresh.existing)
+    }
+
+    @Test fun aNewVersionNextToAnOldOutputIsTheSdrName() {
+        val a = photo(item("IMG1.jpg"), Status.Convert, hdr = true)
+        val first = ConvertPlan.of(listOf(a), lightroom, setOf("IMG1.jpg"), newVersion = true) { true }
+        assertEquals(listOf("IMG1-SDR.jpg"), first.steps.map { it.outName })
+        val second = ConvertPlan.of(listOf(a), lightroom, setOf("IMG1.jpg", "IMG1-SDR.jpg"), newVersion = true) { true }
+        assertEquals(listOf("IMG1-2-SDR.jpg"), second.steps.map { it.outName })
+    }
 }
