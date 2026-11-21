@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import nl.markmaaktmedia.keeper.data.KeeperPrefs
 import nl.markmaaktmedia.keeper.scan.MediaScanner
+import nl.markmaaktmedia.keeper.scan.OutputName
 
 /**
  * Het origineel uit de feed halen zodra de uitvoer er is ("Originelen verbergen"). Keeper wist hier nooit zelf iets: het origineel gaat naar de
@@ -18,7 +19,7 @@ import nl.markmaaktmedia.keeper.scan.MediaScanner
  *
  * Wat verborgen mag worden zet [ConvertJob] klaar als [HideEntry] (alleen camera-JPG's uit DCIM die in een hele run zijn weggeschreven, zie
  * [OriginalsHiding.eligible]). Dit controleert elk ervan opnieuw vlak voor het verbergen, want tussen de omzetting en nu kan er van alles gebeurd zijn:
- * de uitvoer moet er nog staan (niet meer bezig, even groot als geschreven, te lezen op de afmetingen van het origineel, en bij HDR behouden nog een
+ * de uitvoer moet er nog staan (niet meer bezig, even groot als geschreven, te lezen op dezelfde foto als het origineel (zelfde verhouding, minstens 40% van de pixels: Resolutie Automatisch halveert), en bij HDR behouden nog een
  * Ultra HDR-bestand), en het origineel moet nog hetzelfde bestand zijn. Wat niet klopt, wordt niet verborgen en verdwijnt van de lijst.
  *
  * Verbergen gaat via één verzoek aan Android voor het hele pakket ([request]); dat moet vanuit een scherm gestart worden, dus dat doet de app, niet de
@@ -36,13 +37,42 @@ class OriginalsHider(private val context: Context, private val prefs: KeeperPref
     val canManageMedia: Boolean get() = MediaStore.canManageMedia(context)
 
     /** Controleert wat er klaarstaat; wat niet klopt gaat van de lijst af. */
-    suspend fun verify(): Batch = withContext(Dispatchers.IO) {
-        val entries = prefs.pendingHide.first().mapNotNull(HideEntry::decode)
+    suspend fun verify(): Batch = verify(prefs.pendingHide.first().mapNotNull(HideEntry::decode))
+
+    /** Controleert [entries] (de lijst van de instelling, of van [collectDone]); wat niet klopt gaat van de lijst af. */
+    suspend fun verify(entries: List<HideEntry>): Batch = withContext(Dispatchers.IO) {
         val ready = ArrayList<HideEntry>()
         val drop = HashSet<Long>()
         for (e in entries) if (check(e)) ready += e else drop += e.originalId
         if (drop.isNotEmpty()) prefs.removePendingHide(drop)
         Batch(ready, drop.size)
+    }
+
+    /**
+     * Voor de knop "Originelen opruimen": van elke foto die al klaar is ([OriginalsHiding.eligibleDone]) de uitvoer in de uitvoermap erbij zoeken (de
+     * nieuwste als er meer zijn, bijvoorbeeld een -SDR en een -HDR), zodat [verify] ze net zo kan controleren als wat een run klaarzet. Foto's zonder
+     * uitvoer in MediaStore vallen hier al af.
+     */
+    suspend fun collectDone(photos: List<nl.markmaaktmedia.keeper.scan.Photo>): List<HideEntry> = withContext(Dispatchers.IO) {
+        val eligible = photos.filter(OriginalsHiding::eligibleDone)
+        if (eligible.isEmpty()) return@withContext emptyList()
+        val output = prefs.outputFolder.first()
+        val lightroom = prefs.lightroomFolder.first()
+        val outputs = HashMap<String, Pair<Long, Long>>()
+        resolver.query(
+            MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL), arrayOf(MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME, MediaStore.MediaColumns.SIZE), "${MediaStore.MediaColumns.RELATIVE_PATH} LIKE ?", arrayOf("$output%"), null,
+        )?.use { cur ->
+            while (cur.moveToNext()) {
+                val name = cur.getString(1)?.lowercase() ?: continue
+                val id = cur.getLong(0)
+                if ((outputs[name]?.first ?: -1L) < id) outputs[name] = id to cur.getLong(2)
+            }
+        }
+        eligible.mapNotNull { p ->
+            val (name, found) = OutputName.candidates(p.item, lightroom).mapNotNull { n -> outputs[n.lowercase()]?.let { n to it } }.maxByOrNull { it.second.first } ?: return@mapNotNull null
+            val hdr = name.substringBeforeLast('.').endsWith(OutputName.Tag.Hdr.suffix, ignoreCase = true)
+            HideEntry(p.item.id, p.item.name, p.item.size, found.first, found.second, hdr)
+        }
     }
 
     /** De bevestiging van Android voor het verbergen van [entries] in één keer; start hem met een `StartIntentSenderForResult`. */
@@ -81,12 +111,12 @@ class OriginalsHider(private val context: Context, private val prefs: KeeperPref
         false
     }
 
-    /** De uitvoer is te openen en te decoderen (de kop), op de afmetingen van het origineel. */
+    /** De uitvoer is te openen en te decoderen (de kop), en dezelfde foto als het origineel (ook op de helft van de pixels, zie [OriginalsHiding.outputMatches]). */
     private fun readable(e: HideEntry, original: Row): Boolean {
         val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         val pfd = resolver.openFileDescriptor(MediaScanner.imageUri(e.outputId), "r") ?: return false
         pfd.use { BitmapFactory.decodeFileDescriptor(it.fileDescriptor, null, opts) }
-        return OriginalsHiding.sameShape(opts.outWidth, opts.outHeight, original.width, original.height)
+        return OriginalsHiding.outputMatches(opts.outWidth, opts.outHeight, original.width, original.height)
     }
 
     private fun hasGainMap(id: Long): Boolean =

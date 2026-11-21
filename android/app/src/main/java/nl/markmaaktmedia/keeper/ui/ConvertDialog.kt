@@ -39,7 +39,10 @@ import nl.markmaaktmedia.keeper.ui.theme.SquircleShape
  * Het kruisje sluit alleen het venster; de run gaat door (de melding blijft) en het venster komt niet terug tot de volgende run.
  */
 @Composable
-fun ConvertDialog(state: ConvertState, outputFolder: String, onPause: () -> Unit, onContinue: () -> Unit, onClose: () -> Unit) {
+fun ConvertDialog(
+    state: ConvertState, outputFolder: String, onPause: () -> Unit, onContinue: () -> Unit, onClose: () -> Unit,
+    removableCount: Int = 0, onRemoveOriginals: () -> Unit = {},
+) {
     when (state) {
         ConvertState.Idle -> Unit
         is ConvertState.Running -> {
@@ -104,6 +107,10 @@ fun ConvertDialog(state: ConvertState, outputFolder: String, onPause: () -> Unit
                         SecondaryPillButton(stringResource(R.string.convert_later), onClose)
                     } else {
                         PrimaryPillButton(stringResource(R.string.convert_close), onClose)
+                        // Snel de originelen van wat nu klaar is naar de prullenbak (met een vraag eerst); alleen als er iets is omgezet en het geen pauze is.
+                        if (removableCount > 0 && report.done > 0 && report.problem == null) {
+                            SecondaryPillButton(stringResource(R.string.remove_originals_button), onRemoveOriginals, icon = KeeperIcons.Delete)
+                        }
                     }
                 },
             )

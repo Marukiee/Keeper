@@ -255,4 +255,29 @@
     <string name="hdr_strength_default">Default (%1$d%%)</string>
     <string name="hdr_strength_loading">Preparing preview…</string>
     <string name="hdr_strength_unavailable">No preview for this photo</string>
+    <string name="remove_originals_row">Remove originals</string>
+    <plurals name="remove_originals_sub">
+        <item quantity="one">%1$d converted photo, %2$s: the original goes to the trash for 30 days</item>
+        <item quantity="other">%1$d converted photos, %2$s: the originals go to the trash for 30 days</item>
+    </plurals>
+    <string name="remove_originals_button">Move originals to trash</string>
+    <string name="remove_originals_title">Move the originals to the trash?</string>
+    <plurals name="remove_originals_body">
+        <item quantity="one">%1$d original (%2$s) leaves your gallery now and goes to the Android trash. Android removes it after 30 days; until then you can restore it there. Favourites, RAW files and edits stay.</item>
+        <item quantity="other">%1$d originals (%2$s) leave your gallery now and go to the Android trash. Android removes them after 30 days; until then you can restore them there. Favourites, RAW files and edits stay.</item>
+    </plurals>
+    <plurals name="remove_originals_sdr">
+        <item quantity="one">%1$d of these was converted to SDR: its HDR is gone for good once the trash is emptied.</item>
+        <item quantity="other">%1$d of these were converted to SDR: their HDR is gone for good once the trash is emptied.</item>
+    </plurals>
+    <string name="remove_originals_none">No originals to move: nothing converted yet, or they are already gone</string>
+    <string name="remove_originals_failed">Nothing moved: the converted copies could not be checked</string>
+    <plurals name="remove_originals_skipped">
+        <item quantity="one">%1$d skipped: its converted copy could not be checked</item>
+        <item quantity="other">%1$d skipped: their converted copies could not be checked</item>
+    </plurals>
+    <plurals name="originals_moved">
+        <item quantity="one">%1$d original moved to the trash</item>
+        <item quantity="other">%1$d originals moved to the trash</item>
+    </plurals>
 </resources>

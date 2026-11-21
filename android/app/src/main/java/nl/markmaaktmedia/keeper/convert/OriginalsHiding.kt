@@ -1,7 +1,11 @@
 package nl.markmaaktmedia.keeper.convert
 
+import nl.markmaaktmedia.keeper.scan.Classifier
 import nl.markmaaktmedia.keeper.scan.Photo
 import nl.markmaaktmedia.keeper.scan.Status
+import kotlin.math.abs
+import kotlin.math.max
+import kotlin.math.min
 
 /**
  * Een origineel dat naar de prullenbak mag zodra de uitvoer klopt (zie [OriginalsHider]): wat er van het origineel en van de uitvoer bekend was toen
@@ -43,7 +47,30 @@ object OriginalsHiding {
             photo.item.relativePath.startsWith("DCIM/") &&
             !photo.item.isFavorite
 
-    /** Of twee afmetingen dezelfde foto kunnen zijn, ook als de een gedraaid staat (MediaStore telt breedte en hoogte soms vóór de Exif-draaiing). */
-    fun sameShape(w1: Int, h1: Int, w2: Int, h2: Int): Boolean =
-        w1 > 0 && h1 > 0 && ((w1 == w2 && h1 == h2) || (w1 == h2 && h1 == w2))
+    /**
+     * Mag het origineel van een foto die al klaar is op verzoek naar de prullenbak ("Originelen opruimen")? Dezelfde smalle regels als [eligible], zonder dat het
+     * een hele run hoeft te zijn: alleen camera-JPG's uit DCIM die geen favoriet zijn, nooit een RAW, Lightroom-export of Galerij-bewerking. Of de uitvoer er echt
+     * is en klopt, controleert [OriginalsHider.verify] vlak voor het verbergen.
+     */
+    fun eligibleDone(photo: Photo): Boolean =
+        photo.status == Status.Done &&
+            photo.item.isJpeg && !photo.item.isDng &&
+            photo.item.relativePath.startsWith("DCIM/") &&
+            !Classifier.isGalleryEdit(photo.item.name) &&
+            !photo.item.isFavorite
+
+    /**
+     * Kan de uitvoer (met [outW] x [outH]) dezelfde foto zijn als het origineel ([origW] x [origH])? Dezelfde verhouding (ook gedraaid: MediaStore telt breedte en
+     * hoogte soms vóór de Exif-draaiing) en niet kleiner dan 40% van de pixels: Resolutie Automatisch bewaart een foto op de helft van de pixels, een miniatuur
+     * of een andere foto telt niet.
+     */
+    fun outputMatches(outW: Int, outH: Int, origW: Int, origH: Int): Boolean {
+        if (outW <= 0 || outH <= 0 || origW <= 0 || origH <= 0) return false
+        val outAspect = max(outW, outH).toDouble() / min(outW, outH)
+        val origAspect = max(origW, origH).toDouble() / min(origW, origH)
+        val pixels = outW.toDouble() * outH / (origW.toDouble() * origH)
+        return abs(outAspect / origAspect - 1) <= 0.01 && pixels in MIN_PIXEL_SHARE..1.05
+    }
+
+    private const val MIN_PIXEL_SHARE = 0.4
 }

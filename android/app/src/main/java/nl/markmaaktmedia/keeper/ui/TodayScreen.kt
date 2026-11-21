@@ -12,6 +12,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import nl.markmaaktmedia.keeper.R
@@ -39,6 +40,9 @@ fun TodayScreen(
     paused: Boolean,
     onBack: () -> Unit,
     contentPadding: PaddingValues,
+    removableCount: Int = 0,
+    removableBytes: Long = 0,
+    onRemoveOriginals: () -> Unit = {},
 ) {
     LazyColumn(Modifier.fillMaxWidth(), contentPadding = contentPadding, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { UpdateBanner(Modifier.padding(top = 8.dp)) }
@@ -64,6 +68,15 @@ fun TodayScreen(
                 item { Hero(state) }
                 item { SectionHeader(stringResource(R.string.today_section)) }
                 item { Breakdown(state, onOpenEdit) }
+                // Snelle knop: de originelen van wat al omgezet is naar de prullenbak (Android haalt ze na 30 dagen weg).
+                if (removableCount > 0) item {
+                    SettingsGroup {
+                        ActionRow(
+                            0, 1, KeeperIcons.Delete, stringResource(R.string.remove_originals_row),
+                            pluralStringResource(R.plurals.remove_originals_sub, removableCount, removableCount, formatBytes(removableBytes)), onRemoveOriginals,
+                        )
+                    }
+                }
                 item {
                     Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         PrimaryPillButton(stringResource(if (paused) R.string.today_continue else R.string.today_prepare), onConvert, Modifier.fillMaxWidth(), enabled = state.summary.goingCount > 0 && !converting)

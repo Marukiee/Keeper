@@ -253,4 +253,29 @@
     <string name="hdr_strength_default">Standaard (%1$d%%)</string>
     <string name="hdr_strength_loading">Voorbeeld klaarmaken…</string>
     <string name="hdr_strength_unavailable">Geen voorbeeld voor deze foto</string>
+    <string name="remove_originals_row">Originelen opruimen</string>
+    <plurals name="remove_originals_sub">
+        <item quantity="one">%1$d omgezette foto, %2$s: het origineel gaat 30 dagen naar de prullenbak</item>
+        <item quantity="other">%1$d omgezette foto\'s, %2$s: de originelen gaan 30 dagen naar de prullenbak</item>
+    </plurals>
+    <string name="remove_originals_button">Originelen naar prullenbak</string>
+    <string name="remove_originals_title">De originelen naar de prullenbak?</string>
+    <plurals name="remove_originals_body">
+        <item quantity="one">%1$d origineel (%2$s) verdwijnt nu uit je galerij en gaat naar de prullenbak van Android. Android haalt het na 30 dagen weg; tot dan kun je het daar terugzetten. Favorieten, RAW\'s en bewerkingen blijven staan.</item>
+        <item quantity="other">%1$d originelen (%2$s) verdwijnen nu uit je galerij en gaan naar de prullenbak van Android. Android haalt ze na 30 dagen weg; tot dan kun je ze daar terugzetten. Favorieten, RAW\'s en bewerkingen blijven staan.</item>
+    </plurals>
+    <plurals name="remove_originals_sdr">
+        <item quantity="one">%1$d hiervan is naar SDR omgezet: de HDR is voorgoed weg als de prullenbak leeg is.</item>
+        <item quantity="other">%1$d hiervan zijn naar SDR omgezet: de HDR is voorgoed weg als de prullenbak leeg is.</item>
+    </plurals>
+    <string name="remove_originals_none">Geen originelen om te verplaatsen: er is nog niets omgezet, of ze zijn al weg</string>
+    <string name="remove_originals_failed">Niets verplaatst: de omgezette kopieën konden niet gecontroleerd worden</string>
+    <plurals name="remove_originals_skipped">
+        <item quantity="one">%1$d overgeslagen: de omgezette kopie kon niet gecontroleerd worden</item>
+        <item quantity="other">%1$d overgeslagen: de omgezette kopieën konden niet gecontroleerd worden</item>
+    </plurals>
+    <plurals name="originals_moved">
+        <item quantity="one">%1$d origineel naar de prullenbak</item>
+        <item quantity="other">%1$d originelen naar de prullenbak</item>
+    </plurals>
 </resources>

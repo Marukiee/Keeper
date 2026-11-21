@@ -62,11 +62,28 @@ class OriginalsHidingTest {
         assertNull(HideEntry.decode("x|2|3|4|1|a.jpg"))
     }
 
-    @Test fun `dezelfde vorm, ook gedraaid`() {
-        assertTrue(OriginalsHiding.sameShape(4000, 3000, 4000, 3000))
-        assertTrue(OriginalsHiding.sameShape(4000, 3000, 3000, 4000))
-        assertFalse(OriginalsHiding.sameShape(4000, 3000, 4000, 2999))
-        assertFalse(OriginalsHiding.sameShape(0, 0, 0, 0))
-        assertFalse(OriginalsHiding.sameShape(4000, 3000, 0, 0))
+    @Test fun `dezelfde foto, ook gedraaid en op de helft van de pixels`() {
+        assertTrue(OriginalsHiding.outputMatches(4000, 3000, 4000, 3000))
+        assertTrue(OriginalsHiding.outputMatches(4000, 3000, 3000, 4000))
+        // Resolutie Automatisch: 8192x6144 wordt 5793x4344 (de helft van de pixels), ook staand.
+        assertTrue(OriginalsHiding.outputMatches(5793, 4344, 8192, 6144))
+        assertTrue(OriginalsHiding.outputMatches(4344, 5793, 8192, 6144))
+        // Een andere verhouding, een miniatuur of een kwart van de pixels is niet dezelfde foto.
+        assertFalse(OriginalsHiding.outputMatches(4000, 2800, 4000, 3000))
+        assertFalse(OriginalsHiding.outputMatches(512, 384, 4000, 3000))
+        assertFalse(OriginalsHiding.outputMatches(2000, 1500, 4000, 3000))
+        assertFalse(OriginalsHiding.outputMatches(0, 0, 0, 0))
+        assertFalse(OriginalsHiding.outputMatches(4000, 3000, 0, 0))
+    }
+
+    @Test fun `de knop Originelen opruimen pakt alleen klare camera-JPG's uit DCIM`() {
+        assertTrue(OriginalsHiding.eligibleDone(photo(status = Status.Done)))
+        assertFalse(OriginalsHiding.eligibleDone(photo(status = Status.Convert)))
+        assertFalse(OriginalsHiding.eligibleDone(photo(status = Status.NotKept)))
+        assertFalse(OriginalsHiding.eligibleDone(photo("IMG1.dng", mime = "image/x-adobe-dng", status = Status.Done)))
+        assertFalse(OriginalsHiding.eligibleDone(photo(status = Status.Done, favorite = true)))
+        assertFalse(OriginalsHiding.eligibleDone(photo("IMG_20261114_120713.jpg", status = Status.Done)))
+        assertFalse(OriginalsHiding.eligibleDone(photo(path = "Pictures/AdobeLightroom/", status = Status.Done)))
+        assertFalse(OriginalsHiding.eligibleDone(photo(path = "Pictures/Keeper/", status = Status.Done)))
     }
 }

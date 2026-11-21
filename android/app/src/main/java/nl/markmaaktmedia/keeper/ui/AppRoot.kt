@@ -44,6 +44,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -125,6 +126,9 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
     val hideLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
         val asked = hideAsked
         val hidden = result.resultCode == android.app.Activity.RESULT_OK
+        if (hidden && asked.isNotEmpty()) {
+            Toast.makeText(context, context.resources.getQuantityString(R.plurals.originals_moved, asked.size, asked.size), Toast.LENGTH_LONG).show()
+        }
         // Eerst van de lijst af, pas daarna weer vrijgeven: de app komt direct na het sluiten van de dialoog weer vooraan (ON_RESUME) en zou anders de nog
         // niet geschrapte regels opnieuw voorleggen.
         hideScope.launch {
@@ -132,6 +136,41 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
             hideAsked = emptyList()
             if (hidden) vm.refresh()
         }
+    }
+
+    // Originelen opruimen (snelle knop in het overzicht en in het verslag na een run): wat al klaar is gaat op verzoek naar de prullenbak, met dezelfde controle als
+    // bij Originelen verbergen. Eerst een vraag in de app (met hoeveel het is en wat er blijft), dan het verzoek aan Android. Keeper wist zelf niets.
+    var removeAsk by remember { mutableStateOf<List<nl.markmaaktmedia.keeper.convert.HideEntry>>(emptyList()) }
+    val removable = remember(state.photos) { state.photos.filter(nl.markmaaktmedia.keeper.convert.OriginalsHiding::eligibleDone) }
+    val startRemove: () -> Unit = {
+        if (hideAsked.isEmpty()) hideScope.launch {
+            val entries = hider.collectDone(vm.state.value.photos)
+            if (entries.isEmpty()) Toast.makeText(context, R.string.remove_originals_none, Toast.LENGTH_LONG).show() else removeAsk = entries
+        }
+    }
+    if (removeAsk.isNotEmpty()) {
+        val entries = removeAsk
+        val sdr = entries.count { !it.hdr }
+        KeeperConfirmDialog(
+            title = stringResource(R.string.remove_originals_title),
+            body = pluralStringResource(R.plurals.remove_originals_body, entries.size, entries.size, formatBytes(entries.sumOf { it.originalSize })) +
+                if (sdr > 0) "\n\n" + pluralStringResource(R.plurals.remove_originals_sdr, sdr, sdr) else "",
+            confirmLabel = stringResource(R.string.trash_confirm_button),
+            cancelLabel = stringResource(R.string.cleanup_cancel),
+            onConfirm = {
+                removeAsk = emptyList()
+                hideScope.launch {
+                    val batch = hider.verify(entries)
+                    if (batch.ready.isEmpty()) Toast.makeText(context, R.string.remove_originals_failed, Toast.LENGTH_LONG).show() else {
+                        if (batch.dropped > 0) Toast.makeText(context, context.resources.getQuantityString(R.plurals.remove_originals_skipped, batch.dropped, batch.dropped), Toast.LENGTH_LONG).show()
+                        hideAsked = batch.ready
+                        hideLauncher.launch(IntentSenderRequest.Builder(hider.request(batch.ready)).build())
+                    }
+                }
+            },
+            onDismiss = { removeAsk = emptyList() },
+            destructive = true,
+        )
     }
 
     // Omzetten: de locatie van de foto's en meldingen (voortgang, verslag) vragen we vlak voor de eerste run. Zonder locatie begint hij niet,
@@ -200,7 +239,7 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
         ) { (currentSub, currentTab, currentPage) ->
             when (currentSub) {
                 Sub.Viewer -> Unit
-                Sub.Overview -> TodayScreen(state, permitted, { ask.launch(Manifest.permission.READ_MEDIA_IMAGES) }, { tab = 1; sub = Sub.None }, startConvert, converting, paused, { sub = Sub.None }, padding)
+                Sub.Overview -> TodayScreen(state, permitted, { ask.launch(Manifest.permission.READ_MEDIA_IMAGES) }, { tab = 1; sub = Sub.None }, startConvert, converting, paused, { sub = Sub.None }, padding, removable.size, removable.sumOf { it.item.size }, startRemove)
                 Sub.Page -> SettingsPageScreen(currentPage ?: SettingsPage.Look, { page = it }, pageBack, padding)
                 Sub.None -> when (currentTab) {
                     0 -> GalleryScreen(
@@ -222,7 +261,7 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
                 }
             }
         }
-        ConvertDialog(convertState, outputFolder, { converter.requestPause() }, startConvert, { converter.acknowledge() })
+        ConvertDialog(convertState, outputFolder, { converter.requestPause() }, startConvert, { converter.acknowledge() }, removable.size, { converter.acknowledge(); startRemove() })
         PillNavigationBar(
             items = items,
             selectedIndex = tab,
