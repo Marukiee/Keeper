@@ -66,9 +66,7 @@ fun TodayScreen(
             }
             else -> {
                 item { Hero(state) }
-                item { SectionHeader(stringResource(R.string.today_section)) }
-                item { Breakdown(state, onOpenEdit) }
-                // Snelle knop: de originelen van wat al omgezet is naar de prullenbak (Android haalt ze na 30 dagen weg).
+                // Snelle knop, meteen onder de hero (onder de lijst zag je hem niet): de originelen van wat al omgezet is naar de prullenbak (Android haalt ze na 30 dagen weg).
                 if (removableCount > 0) item {
                     SettingsGroup {
                         ActionRow(
@@ -77,6 +75,8 @@ fun TodayScreen(
                         )
                     }
                 }
+                item { SectionHeader(stringResource(R.string.today_section)) }
+                item { Breakdown(state, onOpenEdit) }
                 item {
                     Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         PrimaryPillButton(stringResource(if (paused) R.string.today_continue else R.string.today_prepare), onConvert, Modifier.fillMaxWidth(), enabled = state.summary.goingCount > 0 && !converting)

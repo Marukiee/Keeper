@@ -253,6 +253,9 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
                         { vm.clearSelection() },
                         bounds = tileBounds,
                         onCleanupTrash = trashNow,
+                        removableCount = removable.size,
+                        removableBytes = removable.sumOf { it.item.size },
+                        onRemoveOriginals = startRemove,
                         // Zolang de viewer open staat blijft de tegel van de getoonde foto leeg.
                         hiddenId = if (sub == Sub.Viewer) viewerCurrent else null,
                     )

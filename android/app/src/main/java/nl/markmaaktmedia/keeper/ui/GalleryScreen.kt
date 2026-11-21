@@ -148,6 +148,10 @@ fun GalleryScreen(
     hiddenId: Long? = null,
     /** Opruimen heeft zijn eigen bevestiging al gehad (de dialoog hieronder): dit gaat zonder tweede vraag naar de prullenbak. */
     onCleanupTrash: (List<Photo>) -> Unit = onTrashMany,
+    /** Omgezette foto's waarvan het origineel nog in de Galerij staat, en hun grootte: de snelle knop onder de kop (alleen als het er meer dan nul zijn). */
+    removableCount: Int = 0,
+    removableBytes: Long = 0,
+    onRemoveOriginals: () -> Unit = {},
 ) {
     // Opruimen: welke dag en welke foto's van die dag. Pas na een bevestiging gaat er iets naar de prullenbak.
     var cleanup by remember { mutableStateOf<Pair<String, List<Photo>>?>(null) }
@@ -217,6 +221,9 @@ fun GalleryScreen(
                 stringResource(R.string.gallery_title),
                 if (hasPermission && state.photos.isNotEmpty()) stringResource(R.string.gallery_counts, toReview, state.summary.goingCount, notKept) else null,
             )
+            if (hasPermission && removableCount > 0) {
+                RemoveOriginalsChip(removableCount, removableBytes, onRemoveOriginals, Modifier.padding(top = 8.dp))
+            }
             if (hasPermission && state.photos.isNotEmpty()) {
                 SegmentedPillRow(GalleryFilter.entries, filter, { labels.getValue(it) }, onFilter, Modifier.padding(top = 4.dp, bottom = 12.dp), equalWidth = true)
             }
@@ -267,6 +274,25 @@ fun GalleryScreen(
                 )
             }
         }
+    }
+}
+
+/**
+ * De snelle knop voor Originelen opruimen, onder de kop van de galerij zodat hij meteen te vinden is. Hij vraagt zelf nog om een bevestiging
+ * (zie AppRoot); het origineel gaat naar de prullenbak van Android en wordt daar na 30 dagen weggehaald.
+ */
+@Composable
+private fun RemoveOriginalsChip(count: Int, bytes: Long, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        modifier.clip(PillShape).background(MaterialTheme.colorScheme.secondaryContainer).bouncyClickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(KeeperIcons.Delete, null, tint = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(18.dp))
+        Text(
+            stringResource(R.string.remove_originals_chip, count, formatBytes(bytes)),
+            style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSecondaryContainer,
+        )
     }
 }
 

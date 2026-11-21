@@ -254,6 +254,7 @@
     <string name="hdr_strength_loading">Voorbeeld klaarmaken…</string>
     <string name="hdr_strength_unavailable">Geen voorbeeld voor deze foto</string>
     <string name="remove_originals_row">Originelen opruimen</string>
+    <string name="remove_originals_chip">Originelen opruimen · %1$d · %2$s</string>
     <plurals name="remove_originals_sub">
         <item quantity="one">%1$d omgezette foto, %2$s: het origineel gaat 30 dagen naar de prullenbak</item>
         <item quantity="other">%1$d omgezette foto\'s, %2$s: de originelen gaan 30 dagen naar de prullenbak</item>

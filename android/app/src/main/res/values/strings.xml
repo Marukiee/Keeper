@@ -256,6 +256,7 @@
     <string name="hdr_strength_loading">Preparing preview…</string>
     <string name="hdr_strength_unavailable">No preview for this photo</string>
     <string name="remove_originals_row">Remove originals</string>
+    <string name="remove_originals_chip">Remove originals · %1$d · %2$s</string>
     <plurals name="remove_originals_sub">
         <item quantity="one">%1$d converted photo, %2$s: the original goes to the trash for 30 days</item>
         <item quantity="other">%1$d converted photos, %2$s: the originals go to the trash for 30 days</item>
