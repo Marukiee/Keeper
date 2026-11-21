@@ -42,6 +42,7 @@ class KeeperPrefs(private val context: Context) {
         val hdrStrengthByName = stringSetPreferencesKey("hdr_strength_by_name")
         val keepHdr = booleanPreferencesKey("keep_hdr")
         val keepHdrByName = stringSetPreferencesKey("keep_hdr_by_name")
+        val viewerOptions = booleanPreferencesKey("viewer_options")
         val hideOriginals = booleanPreferencesKey("hide_originals")
         val pendingHide = stringSetPreferencesKey("pending_hide")
         val lookDefault = stringPreferencesKey("look_default")
@@ -162,6 +163,13 @@ class KeeperPrefs(private val context: Context) {
         if (keep == null) now.remove(name) else now[name] = keep
         it[K.keepHdrByName] = KeepEntries.encode(now)
     }
+
+    /**
+     * Het paneel met HDR of SDR en de sterkte staat onder elke HDR-foto in de viewer, ook als je doorveegt (om snel foto na foto aan te passen).
+     * Standaard aan; te verbergen via het menu van de viewer.
+     */
+    val viewerOptions: Flow<Boolean> = data.map { it[K.viewerOptions] ?: true }.distinctUntilChanged()
+    suspend fun setViewerOptions(on: Boolean) = edit { it[K.viewerOptions] = on }
 
     /**
      * Originelen verbergen: na een gelukte omzetting gaan de camera-JPG's waarvan de uitvoer klopt naar de prullenbak van de Galerij (zie

@@ -104,12 +104,24 @@ class LocalToneTest {
     }
 
     @Test fun `de lokale tone map volgt het prototype`() {
-        check(floatArrayOf(2.0f, 2.2f, 2.6f), floatArrayOf(0.85f, 0.9f, 0.95f), 2.0f, floatArrayOf(0.863455f, 0.922059f, 0.994751f))
+        check(floatArrayOf(2.0f, 2.2f, 2.6f), floatArrayOf(0.85f, 0.9f, 0.95f), 2.0f, floatArrayOf(0.807221f, 0.884569f, 0.994751f))
         check(floatArrayOf(3.0f, 2.8f, 2.0f), floatArrayOf(0.9f, 0.88f, 0.8f), 3.5f, floatArrayOf(0.789484f, 0.736851f, 0.526322f))
-        check(floatArrayOf(1.2f, 1.3f, 1.5f), floatArrayOf(0.6f, 0.65f, 0.7f), 1.0f, floatArrayOf(0.846292f, 0.898588f, 0.975085f))
-        check(floatArrayOf(4.5f, 4.0f, 3.0f), floatArrayOf(1.0f, 0.95f, 0.8f), 2.2f, floatArrayOf(0.999999f, 0.999973f, 0.997894f))
-        check(floatArrayOf(0.3f, 0.9f, 2.4f), floatArrayOf(0.4f, 0.7f, 0.95f), 1.6f, floatArrayOf(0.196649f, 0.457355f, 0.998902f))
+        check(floatArrayOf(1.2f, 1.3f, 1.5f), floatArrayOf(0.6f, 0.65f, 0.7f), 1.0f, floatArrayOf(0.822218f, 0.882538f, 0.975085f))
+        check(floatArrayOf(4.5f, 4.0f, 3.0f), floatArrayOf(1.0f, 0.95f, 0.8f), 2.2f, floatArrayOf(0.999999f, 0.944433f, 0.831273f))
+        check(floatArrayOf(0.3f, 0.9f, 2.4f), floatArrayOf(0.4f, 0.7f, 0.95f), 1.6f, floatArrayOf(0.13864f, 0.41592f, 0.998902f))
         check(floatArrayOf(1.8f, 1.8f, 1.8f), floatArrayOf(0.95f, 0.95f, 0.95f), 1.9f, floatArrayOf(0.793829f, 0.793829f, 0.793829f))
+    }
+
+    @Test fun `een heldere gekleurde pixel houdt zijn kleur in plaats van naar wit te gaan`() {
+        // Zonsondergang: HDR (3,25; 2,09; 0,68), camera-SDR (1,0; 0,73; 0,24), omgeving 2,2. De luminantiecurve zet het rode kanaal boven wit; terug naar
+        // grijs gaf (1,0; 0,86; 0,69), bleek geel. Nu blijft het de oranje van de camera en van de HDR-weergave (G/R 0,64, B/R 0,21 zoals in de HDR).
+        val h = floatArrayOf(3.25f, 2.09f, 0.68f)
+        check(h, floatArrayOf(1.0f, 0.73f, 0.24f), 2.2f, floatArrayOf(0.999433f, 0.729277f, 0.237277f))
+        val o = map(h, floatArrayOf(1.0f, 0.73f, 0.24f), 2.2f)
+        assertTrue("blauw ${o[2]} blijft ver onder groen ${o[1]}", o[2] < 0.3f && o[1] > 0.65f)
+        // Een heldere maar niet-oranje pixel (grijs) is niet gekleurd en blijft grijs.
+        val g = map(floatArrayOf(3f, 3f, 3f), floatArrayOf(0.9f, 0.9f, 0.9f), 2.5f)
+        assertEquals(g[0], g[1], 1e-6f); assertEquals(g[0], g[2], 1e-6f)
     }
 
     @Test fun `in een donkere omgeving geldt de globale curve`() {

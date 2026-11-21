@@ -178,8 +178,8 @@ fun ViewerScreen(
     // sterkte; bij SDR wat de SDR-omzetting zou maken.
     val keepHdr by strengthPrefs.keepHdr.collectAsState(initial = false)
     val keepByName by strengthPrefs.keepHdrByName.collectAsState(initial = emptyMap())
-    var strengthOpen by remember { mutableStateOf(false) }
-    var liveStrength by remember { mutableIntStateOf(100) }
+    // Het paneel met HDR of SDR en de sterkte staat standaard onder elke HDR-foto, ook tijdens het doorvegen (aan of uit via het menu).
+    val optionsOn by strengthPrefs.viewerOptions.collectAsState(initial = true)
     var previewBusy by remember { mutableStateOf(false) }
     var previewMissing by remember { mutableStateOf(false) }
     val pager = rememberPagerState(initialPage = list.indexOfFirst { it.item.id == startId }.coerceAtLeast(0)) { list.size }
@@ -208,8 +208,13 @@ fun ViewerScreen(
     // Openen: de foto groeit uit zijn tegel; tot dat klaar is staat de pager uit en komt de achtergrond (openT) geleidelijk binnen.
     var opening by remember { mutableStateOf(true) }
     var openT by remember { mutableFloatStateOf(0f) }
-    LaunchedEffect(pager.currentPage) { zoomed = false; strengthOpen = false }
+    LaunchedEffect(pager.currentPage) { zoomed = false }
     val current = list[pager.currentPage.coerceIn(0, list.lastIndex)]
+    val strengthOpen = optionsOn && current.hdr
+    // De sterkte die de schuif nu toont: wat je sleept, anders wat voor deze foto is opgeslagen (of de standaard). Per foto opnieuw, zodat een volgende foto
+    // meteen met zijn eigen sterkte begint en het voorbeeld niet eerst op die van de vorige wordt uitgerekend.
+    var dragged by remember(current.item.id) { mutableStateOf<Int?>(null) }
+    val liveStrength = dragged ?: strengthByName[current.item.name] ?: defaultStrength
     val keepNow = keepByName[current.item.name] ?: keepHdr
     val hdrPreview = keepNow && hdrPreviewSupported
     // Een scherm laat HDR alleen zien als het venster in HDR-modus staat. Dat gaat aan zolang het HDR-voorbeeld zichtbaar is en daarna weer terug,
@@ -289,8 +294,6 @@ fun ViewerScreen(
     val closeLatest by rememberUpdatedState<(Velocity) -> Unit> { closeNow(it) }
     // Terug (knop of gebaar) sluit op dezelfde manier. Altijd actief, zodat het scherm niet midden in de vlucht wegvalt.
     BackHandler { closeLatest(Velocity.Zero) }
-    // Staat het sterktepaneel open, dan sluit terug eerst dat.
-    BackHandler(enabled = strengthOpen) { strengthOpen = false }
     // Knoppen en kop zijn al weg na een vijfde van het sleepbereik, zodat ze niet over de galerij eronder hangen.
     // Bij het openen komen ze pas binnen als de foto bijna op zijn plek is.
     val barsFade: androidx.compose.ui.graphics.GraphicsLayerScope.() -> Unit = { alpha = ((openT - 0.5f) * 2f).coerceIn(0f, 1f) * (1f - (progress() * BARS_FADE).coerceAtMost(1f)) }
@@ -335,10 +338,9 @@ fun ViewerScreen(
                         onClick = { menuOpen = false; onConvertOne(asked) },
                     )
                     DropdownMenuItem(
-                        text = { Text(stringResource(R.string.viewer_hdr_options)) },
-                        // Alleen een HDR-JPG heeft een gain map om te schuiven.
-                        enabled = asked.hdr,
-                        onClick = { menuOpen = false; liveStrength = strengthByName[asked.item.name] ?: defaultStrength; strengthOpen = true },
+                        text = { Text(stringResource(if (optionsOn) R.string.viewer_options_hide else R.string.viewer_options_show)) },
+                        // Het paneel staat alleen onder een HDR-JPG (alleen die heeft een gain map om te schuiven); de keuze geldt voor alle foto's.
+                        onClick = { menuOpen = false; scope.launch { strengthPrefs.setViewerOptions(!optionsOn) } },
                     )
                 }
             }
@@ -404,24 +406,25 @@ fun ViewerScreen(
                     onPreviewMissing = { previewMissing = it },
                 )
             }
+            // Het voorbeeld wordt klaargemaakt of is er niet: een melding boven de foto, zodat het paneel eronder niet van hoogte verandert.
+            if (strengthOpen && (previewBusy || previewMissing)) Text(
+                stringResource(if (previewBusy) R.string.hdr_strength_loading else R.string.hdr_strength_unavailable),
+                style = MaterialTheme.typography.labelMedium, color = Color.White,
+                modifier = Modifier.align(Alignment.TopCenter).padding(12.dp).clip(PillShape).background(Color.Black.copy(alpha = 0.5f)).padding(horizontal = 10.dp, vertical = 4.dp),
+            )
         }
-        if (strengthOpen) HdrStrengthPanel(
-            percent = liveStrength,
-            defaultPercent = defaultStrength,
-            keepHdr = keepNow,
-            onKeepChange = { keep -> val asked = current; scope.launch { strengthPrefs.setKeepHdrFor(asked.item.name, keep) } },
-            hasOverride = strengthByName.containsKey(current.item.name) || liveStrength != defaultStrength || keepByName.containsKey(current.item.name),
-            converting = converting,
-            loading = previewBusy,
-            missing = previewMissing && !previewBusy,
-            onChange = { liveStrength = it },
-            onFinished = { val asked = current; scope.launch { strengthPrefs.setHdrStrengthFor(asked.item.name, liveStrength) } },
-            onReset = { val asked = current; liveStrength = defaultStrength; scope.launch { strengthPrefs.setHdrStrengthFor(asked.item.name, null); strengthPrefs.setKeepHdrFor(asked.item.name, null) } },
-            onDone = { strengthOpen = false },
-            // Eerst opslaan: de omzetting leest de sterkte van deze foto bij het begin.
-            onConvert = { val asked = current; strengthOpen = false; scope.launch { strengthPrefs.setHdrStrengthFor(asked.item.name, liveStrength); onConvertOne(asked) } },
-            modifier = Modifier.graphicsLayer(block = barsFade).padding(horizontal = 12.dp, vertical = 8.dp),
-        ) else Column(Modifier.graphicsLayer(block = barsFade).padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        // Het paneel staat boven de kop en de knoppen: bewaren en niet bewaren blijven dus gewoon bereikbaar tijdens het doorvegen.
+        Column(Modifier.graphicsLayer(block = barsFade).padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (strengthOpen) HdrStrengthPanel(
+                percent = liveStrength,
+                defaultPercent = defaultStrength,
+                keepHdr = keepNow,
+                onKeepChange = { keep -> val asked = current; scope.launch { strengthPrefs.setKeepHdrFor(asked.item.name, keep) } },
+                hasOverride = strengthByName.containsKey(current.item.name) || liveStrength != defaultStrength || keepByName.containsKey(current.item.name),
+                onChange = { dragged = it },
+                onFinished = { val asked = current; val value = dragged ?: liveStrength; scope.launch { strengthPrefs.setHdrStrengthFor(asked.item.name, value) } },
+                onReset = { val asked = current; dragged = defaultStrength; scope.launch { strengthPrefs.setHdrStrengthFor(asked.item.name, null); strengthPrefs.setKeepHdrFor(asked.item.name, null) } },
+            )
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(stringResource(current.status.label), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
                 Text(
@@ -440,7 +443,7 @@ fun ViewerScreen(
                             stringResource(R.string.viewer_discarded), { onUndoReject(current) }, Modifier.weight(1f), icon = KeeperIcons.Close,
                             container = MaterialTheme.colorScheme.errorContainer, content = MaterialTheme.colorScheme.onErrorContainer, shape = ConnectedStartShape,
                         ) else SecondaryPillButton(stringResource(R.string.viewer_discard), { onReject(current); next() }, Modifier.weight(1f), icon = KeeperIcons.Close, shape = ConnectedStartShape)
-                        if (current.selected) PrimaryPillButton(stringResource(R.string.viewer_kept), { onSelect(current, false) }, Modifier.weight(1f), icon = KeeperIcons.Check, shape = ConnectedEndShape)
+                        if (current.kept) PrimaryPillButton(stringResource(R.string.viewer_kept), { onSelect(current, false) }, Modifier.weight(1f), icon = KeeperIcons.Check, shape = ConnectedEndShape)
                         else SecondaryPillButton(stringResource(R.string.viewer_keep), { if (current.askBeforeKeeping) askEdited = true else { onSelect(current, true); next() } }, Modifier.weight(1f), icon = KeeperIcons.Check, shape = ConnectedEndShape)
                     }
                 } else Box(Modifier.weight(1f))

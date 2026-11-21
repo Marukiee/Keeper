@@ -70,7 +70,7 @@ object Classifier {
                 item.isJpeg -> Status.NotKept
                 else -> return@mapNotNull null
             }
-            Photo(item, status, hdr, item.name in rejected, edit, editIds)
+            Photo(item, status, hdr, item.name in rejected, edit, editIds, markedKept = isDone && item.name in kept)
         }.sortedByDescending { it.item.dateTakenMs.takeIf { t -> t > 0 } ?: it.item.dateAddedMs }
     }
 

@@ -12,6 +12,8 @@ import kotlin.math.tanh
  *
  * Luminantie krijgt een curve met een zachte schouder boven de knie, de kleurverhouding blijft, wat daarna nog boven 1,0
  * uitkomt wordt naar grijs gedesatureerd. Een halve luminantiecurve en een halve per-kanaalcurve (mix 0,5) houdt blauwe lucht blauw.
+ * Dat geldt voor [map] (het terugvalpad). De lokale tone map [mapLocal], die de app gebruikt, zet wat boven wit uitkomt juist terug op de
+ * kleurverhouding, zodat een oranje gloed oranje blijft.
  */
 class ToneMapper(
     peak: Float,
@@ -119,6 +121,7 @@ class ToneMapper(
      * In de lichten waar de gain map oplicht is de luminantie `c(m) * (y / m)` (begrensd op [LocalTone.DCAP]); waar de gain map niet oplicht (omlijsting,
      * tekst) of de omgeving donker is, geldt de globale curve (met dezelfde top), met het gewicht `wl = smooth(M0, M1, m) * smooth(R0, R1, y / ys)`.
      * De per-kanaalcurve (mix 0,5) volgt dezelfde indeling. Een zachte klem (tanh) boven [LocalTone.SOFT] laat het detail niet hard afknippen.
+     * Komt een kanaal na het schalen boven wit uit, dan gaat de pixel terug op zijn kleurverhouding (niet naar grijs): een gekleurde lichte pixel blijft gekleurd.
      */
     fun mapLocal(r: Float, g: Float, b: Float, sr: Float, sg: Float, sb: Float, m0: Float, out: FloatArray, o: Int) {
         val y = luma[0] * r + luma[1] * g + luma[2] * b
@@ -133,11 +136,12 @@ class ToneMapper(
         var ob = b * scale
         val mx = max(or, max(og, ob))
         if (mx > 1f) {
-            val yc = min(yo, 1f)
-            val t = (1f - yc) / max(mx - yc, 1e-6f)
-            or = yc + (or - yc) * t
-            og = yc + (og - yc) * t
-            ob = yc + (ob - yc) * t
+            // Kleur behouden: wat boven wit uitkomt gaat terug op de kleurverhouding (sterkste kanaal op 1), niet naar grijs. Naar grijs
+            // maakte de oranje gloed van een zonsondergang bleek geel en wit, terwijl de HDR-weergave en de camera-SDR oranje zijn.
+            val k = 1f / mx
+            or *= k
+            og *= k
+            ob *= k
         }
         or = mix * or + (1f - mix) * channel(r, wl, cm, m)
         og = mix * og + (1f - mix) * channel(g, wl, cm, m)

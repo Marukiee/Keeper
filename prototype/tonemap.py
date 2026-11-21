@@ -203,9 +203,9 @@ def lt_map(hdr, sdr, m, e, knee, peak):
     mx = out.max(axis=-1)
     over = mx > 1.0
     if over.any():
-        yc = np.minimum(yo, 1.0)
-        t = np.where(over, (1.0 - yc) / np.maximum(mx - yc, 1e-6), 1.0)
-        out = yc[..., None] + (out - yc[..., None]) * t[..., None]
+        # Kleur behouden: wat boven wit uitkomt gaat terug op de kleurverhouding (sterkste kanaal op 1), niet naar grijs. Naar grijs maakte
+        # de oranje gloed van een zonsondergang bleek geel/wit, terwijl de HDR-weergave en de camera-SDR oranje zijn.
+        out = np.where(over[..., None], out / np.maximum(mx, 1e-6)[..., None], out)
     w3 = wl[..., None]
     ch = (1.0 - w3) * lt_curve(hdr, e, knee, peak, top) + w3 * _lt_soft(cm[..., None] * np.minimum(hdr / m[..., None], LT_CHCAP), top)
     out = 0.5 * out + 0.5 * np.minimum(ch, 1.0)

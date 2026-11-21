@@ -179,7 +179,8 @@ fun GalleryScreen(
     val labels = GalleryFilter.entries.associateWith { stringResource(it.label) }
     // Alleen wat Mark zelf beoordeelt: camera-JPG's en RAW's, niet de Lightroom-exports.
     val (toReview, notKept) = remember(state.photos) {
-        val reviewable = state.photos.filter { it.selectable && !it.defaultsOn }
+        // Wat al klaar is hoeft niet meer bekeken te worden, ook al is het te kiezen.
+        val reviewable = state.photos.filter { it.selectable && !it.defaultsOn && it.status != Status.Done }
         reviewable.count { !it.kept && !it.discarded } to reviewable.count { it.discarded }
     }
     var askClear by remember { mutableStateOf(false) }
@@ -550,7 +551,8 @@ private fun Tile(photo: Photo, selecting: Boolean, picked: Boolean, hidden: Bool
     // Alleen een gekozen foto (selectie) wordt kleiner met ronde hoeken. Bewaard of niet bewaard verandert de tegel zelf niet.
     val scale by animateFloatAsState(if (picked) 0.88f else 1f, KeeperMotion.bouncy(), label = "tileScale")
     val corner by animateDpAsState(if (picked) 18.dp else 8.dp, KeeperMotion.bouncy(), label = "tileCorner")
-    val dim = if (photo.selectable) 1f else 0.45f
+    // Klaar is te kiezen, maar iets gedempt: het is al omgezet. Wat niet te kiezen is, is nog meer gedempt.
+    val dim = when { photo.status == Status.Done -> 0.7f; photo.selectable -> 1f; else -> 0.45f }
     // "Bewerkt" gaat voor "RAW": een RAW met een Lightroom-export laat zien dat er een bewerking bestaat, ook als hij zelf meegaat.
     val badge = when {
         photo.status == Status.Done -> R.string.tile_done

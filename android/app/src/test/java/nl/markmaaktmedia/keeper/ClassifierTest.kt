@@ -5,6 +5,7 @@ import nl.markmaaktmedia.keeper.scan.Edit
 import nl.markmaaktmedia.keeper.scan.MediaItem
 import nl.markmaaktmedia.keeper.scan.Probe
 import nl.markmaaktmedia.keeper.scan.Status
+import nl.markmaaktmedia.keeper.scan.Summary
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -88,6 +89,24 @@ class ClassifierTest {
         val a = item("IMG1.jpg", path = "Pictures/AdobeLightroom/"); val b = item("IMG2.jpg")
         val r = run(listOf(a, b), skipped = setOf(a.name), done = setOf("img2.JPG"))
         assertEquals(Status.Skipped, r[a.name]); assertEquals(Status.Done, r[b.name])
+    }
+
+    @Test fun aFinishedPhotoCanBePickedKeptAndDiscardedButNeverGoesAlongAgain() {
+        val lr = "Pictures/AdobeLightroom/"
+        val kept = item("IMG20261120100000.jpg"); val discarded = item("IMG20261120100100.jpg"); val untouched = item("IMG20261120100200.jpg")
+        val done = setOf(kept.name, discarded.name, untouched.name)
+        val photos = Classifier.classify(listOf(kept, discarded, untouched), emptyMap(), emptySet(), setOf(kept.name), done, lr, rejected = setOf(discarded.name))
+        val byName = photos.associateBy { it.item.name }
+        for (p in photos) {
+            // Klaar is te kiezen (dus de selectiebalk blijft staan), maar gaat niet nog een keer mee en Opruimen laat het staan.
+            assertEquals(Status.Done, p.status); assertEquals(true, p.selectable); assertEquals(false, p.goesAlong); assertEquals(false, p.cleanable)
+        }
+        assertEquals(true, byName.getValue(kept.name).kept); assertEquals(false, byName.getValue(kept.name).discarded)
+        assertEquals(false, byName.getValue(discarded.name).kept); assertEquals(true, byName.getValue(discarded.name).discarded)
+        assertEquals(false, byName.getValue(untouched.name).kept); assertEquals(false, byName.getValue(untouched.name).discarded)
+        // Wat al klaar is, wordt niet nog een keer gedaan en vraagt niet om een bewerking.
+        assertEquals(false, byName.getValue(kept.name).askBeforeKeeping)
+        assertEquals(Summary(emptyMap(), 0, 0, 0).goingCount, Classifier.summarize(photos).goingCount)
     }
 
     @Test fun jpgIsNotKeptUntilMarkKeepsIt() {

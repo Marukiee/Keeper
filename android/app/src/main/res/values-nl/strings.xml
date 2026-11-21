@@ -238,12 +238,9 @@
     <string name="hdr_strength_sdr">SDR</string>
     <string name="hdr_strength_hdr">HDR</string>
     <string name="viewer_hdr_strength">HDR-sterkte</string>
-    <string name="viewer_hdr_options">HDR of SDR en sterkte</string>
-    <string name="hdr_kind_hdr_hint">HDR behouden: een HDR-foto (Ultra HDR) met -HDR in de naam. De sterkte staat erin en bepaalt hoeveel HDR er op een HDR-scherm te zien is.</string>
-    <string name="hdr_kind_sdr_hint">SDR: een gewone foto met -SDR in de naam, gemaakt met de tone map. De sterkte bepaalt hoeveel van de HDR erin meetelt.</string>
+    <string name="viewer_options_show">HDR/SDR-opties tonen</string>
+    <string name="viewer_options_hide">HDR/SDR-opties verbergen</string>
     <string name="hdr_strength_default">Standaard (%1$d%%)</string>
-    <string name="hdr_strength_done">Klaar</string>
-    <string name="hdr_strength_convert">Omzetten met deze</string>
     <string name="hdr_strength_loading">Voorbeeld klaarmaken…</string>
     <string name="hdr_strength_unavailable">Geen voorbeeld voor deze foto</string>
 </resources>

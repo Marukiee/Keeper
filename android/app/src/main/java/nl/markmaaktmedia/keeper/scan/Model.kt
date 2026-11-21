@@ -64,24 +64,29 @@ data class Photo(
     val edit: Edit = Edit.None,
     /** Welke bestanden de bewerking zijn (de Lightroom-export of Galerij-kopie), als [edit] niet [Edit.None] is. */
     val editIds: List<Long> = emptyList(),
+    /**
+     * Alleen bij [Status.Done]: Mark heeft deze foto bewaard (naam op de bewaarlijst). Een foto die klaar is gaat niet meer mee, maar je kunt hem wel
+     * bewaren of niet bewaren: dat is alleen een keuze die zichtbaar blijft, er wordt niets opnieuw omgezet (dat is "nieuwe versie maken").
+     */
+    val markedKept: Boolean = false,
 ) {
     /** Gaat mee naar de uitvoermap. */
     val goesAlong get() = status in ALONG
     /** Moet door de HDR-naar-SDR-conversie. */
     val needsConversion get() = status == Status.Convert || status == Status.CameraVersion || (status == Status.GalleryEdit && hdr)
-    /** Kan Mark deze aan- of uitzetten? Wat blijft liggen of al klaar is niet. */
+    /** Kan Mark deze kiezen, bewaren of niet bewaren? Alles, ook wat al klaar is: de keuze blijft dan zichtbaar maar er wordt niets opnieuw omgezet. */
     val selectable get() = status in SELECTABLE
     /** Aan betekent: gaat mee. Dat is het vinkje in de galerij. */
     val selected get() = goesAlong
-    /** Bewaard: gaat mee. Hetzelfde als [selected], maar zonder de verwarring met de selectie in de galerij. */
-    val kept get() = goesAlong
+    /** Bewaard: gaat mee, of (bij een foto die al klaar is) door Mark bewaard. Dat is het groene vinkje rechtsonder op de tegel. */
+    val kept get() = goesAlong || (status == Status.Done && markedKept)
     /**
      * Bestaat er al een bewerkte versie (die meegaat) terwijl dit origineel zelf niet bewaard is? Bewaren zou dan een tweede versie van dezelfde
      * foto geven (de camera-versie naast de Lightroom-export), dus daar vraagt de app eerst naar.
      */
     val askBeforeKeeping get() = edit != Edit.None && !goesAlong
     /** Bewust niet bewaard (kruisknop): krijgt een kruisje in de galerij. */
-    val discarded get() = rejected && selectable && !goesAlong
+    val discarded get() = rejected && selectable && !kept
     /**
      * Mag Opruimen deze naar de prullenbak sturen? Alleen camera-JPG's die niet bewaard zijn en geen favoriet.
      * RAW's, Lightroom-exports, Galerij-bewerkingen en originelen daarvan blijven altijd staan.
@@ -94,8 +99,8 @@ data class Photo(
 
     companion object {
         private val ALONG = setOf(Status.Convert, Status.AsIs, Status.LightroomExport, Status.GalleryEdit, Status.CameraVersion)
-        /** Alles behalve wat al klaar is. Ook een RAW of JPG mét bewerking is te kiezen: bewaren (de camera-versie gaat dan ook mee), niet bewaren of weggooien. */
-        private val SELECTABLE = ALONG + Status.NeedsEdit + Status.Skipped + Status.NotKept + Status.RawEdited + Status.OriginalReplaced + Status.OriginalExported
+        /** Alles. Ook een RAW of JPG mét bewerking is te kiezen: bewaren (de camera-versie gaat dan ook mee), niet bewaren of weggooien; en wat klaar is ook. */
+        private val SELECTABLE = ALONG + Status.NeedsEdit + Status.Skipped + Status.NotKept + Status.RawEdited + Status.OriginalReplaced + Status.OriginalExported + Status.Done
     }
 }
 
