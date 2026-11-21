@@ -26,13 +26,13 @@ class Plan(val steps: List<Step>, val existing: List<Photo>, val clashes: List<P
 object ConvertPlan {
     /**
      * @param newVersion een nieuwe versie maken naast wat er al staat (zie [OutputName.versioned]) in plaats van de foto over te slaan.
-     * @param sdrOutput wordt de uitvoer van deze foto SDR? Alleen voor wat omgezet wordt ([How.Convert], [How.CameraVersion]): die krijgt `-SDR` aan het
-     *   eind van de naam. Met HDR behouden is het een HDR-bestand en blijft de naam zoals hij was; een kopie ook. Dat hangt van de instelling en de
-     *   HDR-sterkte van de foto af, dus dat bepaalt de aanroeper.
+     * @param kindOf de soort uitvoer van deze foto: SDR of HDR behouden. Alleen voor wat omgezet wordt ([How.Convert], [How.CameraVersion]): die krijgt
+     *   `-SDR` of `-HDR` aan het eind van de naam; een kopie houdt zijn naam. Dat hangt van de instelling en de HDR-sterkte van de foto af (sterkte 0
+     *   valt terug op SDR), dus dat bepaalt de aanroeper.
      */
     fun of(
         photos: List<Photo>, lightroomFolder: String, existingNames: Set<String>, newVersion: Boolean = false,
-        sdrOutput: (Photo) -> Boolean = { false },
+        kindOf: (Photo) -> OutputName.Tag = { OutputName.Tag.None },
     ): Plan {
         val have = existingNames.map { it.lowercase() }.toSet()
         val used = HashSet<String>()
@@ -45,13 +45,14 @@ object ConvertPlan {
                 photo.needsConversion -> How.Convert
                 else -> How.Copy
             }
-            val sdr = how != How.Copy && sdrOutput(photo)
-            val name = OutputName.of(photo.item, lightroomFolder, sdr).let { if (newVersion) OutputName.versioned(it, have + used) else it }
+            val kind = if (how == How.Copy) OutputName.Tag.None else kindOf(photo)
+            val name = OutputName.of(photo.item, lightroomFolder, kind).let { if (newVersion) OutputName.versioned(it, have + used) else it }
             val key = name.lowercase()
-            // Een uitvoer van vóór `-SDR` heet nog zoals hij was en telt als er al: anders kwam elke oude foto er nu een tweede keer bij.
-            val oldName = !newVersion && sdr && OutputName.of(photo.item, lightroomFolder).lowercase() in have
+            // Staat er al een uitvoer van deze foto onder een andere naam (zonder soort, van vóór `-SDR` en `-HDR`, of de andere soort)? Dan telt die als er al:
+            // anders kwam elke oude foto er een tweede keer bij. Een nieuwe versie wil juist naast wat er staat.
+            val otherName = !newVersion && OutputName.candidates(photo.item, lightroomFolder).any { it.lowercase() in have }
             when {
-                key in have || oldName -> existing += photo
+                key in have || otherName -> existing += photo
                 !used.add(key) -> clashes += photo
                 else -> steps += Step(photo, name, how)
             }

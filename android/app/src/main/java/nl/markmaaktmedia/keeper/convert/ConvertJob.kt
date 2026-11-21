@@ -14,6 +14,7 @@ import nl.markmaaktmedia.keeper.data.KeeperPrefs
 import nl.markmaaktmedia.keeper.scan.Classifier
 import nl.markmaaktmedia.keeper.scan.MediaItem
 import nl.markmaaktmedia.keeper.scan.MediaScanner
+import nl.markmaaktmedia.keeper.scan.OutputName
 import nl.markmaaktmedia.keeper.scan.Photo
 import nl.markmaaktmedia.keeper.scan.Status
 import nl.markmaaktmedia.keeper.scan.ToneMap
@@ -114,8 +115,11 @@ class ConvertJob(private val context: Context, private val prefs: KeeperPrefs, p
         val defaultStrength = prefs.hdrStrength.first()
         val strengthByName = prefs.hdrStrengthByName.first()
         val strengthOf = { photo: Photo -> (strengthByName[photo.item.name] ?: defaultStrength) / 100f }
-        // Wat SDR wordt, krijgt `-SDR` in de naam. Dat hangt per foto af van HDR behouden én de sterkte (sterkte 0 valt terug op SDR), dus de planning vraagt het hier.
-        val plan = ConvertPlan.of(photos, snapshot.lightroomFolder, existing, options.newVersion) { photo -> !settings.withStrength(strengthOf(photo)).keepsHdr }
+        // Wat omgezet wordt, krijgt `-SDR` of (HDR behouden) `-HDR` in de naam. Dat hangt per foto af van de instelling én de sterkte (sterkte 0 valt terug op SDR),
+        // dus de planning vraagt het hier.
+        val plan = ConvertPlan.of(photos, snapshot.lightroomFolder, existing, options.newVersion) { photo ->
+            if (settings.withStrength(strengthOf(photo)).keepsHdr) OutputName.Tag.Hdr else OutputName.Tag.Sdr
+        }
         // Originelen verbergen (instelling): alleen na een hele run telt wat klaar is, zie OriginalsHiding.eligible. De controle zelf komt later, vlak voor het verbergen.
         val hideOn = prefs.hideOriginals.first()
         val wholeRun = options.forceHide || (options.only == null && options.folder == null && !options.newVersion)

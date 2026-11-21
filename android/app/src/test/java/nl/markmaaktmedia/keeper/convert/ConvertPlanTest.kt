@@ -105,19 +105,19 @@ class ConvertPlanTest {
     // ---- -SDR aan het eind van de naam ----
 
     @Test fun whatBecomesSdrGetsSdrAtTheEndOfItsName() {
-        assertEquals("IMG1-SDR.jpg", OutputName.of(item("IMG1.jpg"), lightroom, sdr = true))
-        assertEquals("IMG1-SDR.jpg", OutputName.of(item("IMG1.dng"), lightroom, sdr = true))
-        assertEquals("IMG_20261114_120713-SDR.jpg", OutputName.of(item("IMG_20261114_120713.jpg"), lightroom, sdr = true))
-        assertEquals("noext-SDR", OutputName.of(item("noext", mime = "image/jpeg"), lightroom, sdr = true))
+        assertEquals("IMG1-SDR.jpg", OutputName.of(item("IMG1.jpg"), lightroom, OutputName.Tag.Sdr))
+        assertEquals("IMG1-SDR.jpg", OutputName.of(item("IMG1.dng"), lightroom, OutputName.Tag.Sdr))
+        assertEquals("IMG_20261114_120713-SDR.jpg", OutputName.of(item("IMG_20261114_120713.jpg"), lightroom, OutputName.Tag.Sdr))
+        assertEquals("noext-SDR", OutputName.of(item("noext", mime = "image/jpeg"), lightroom, OutputName.Tag.Sdr))
         // Een Lightroom-export gaat altijd zoals hij is mee: nooit SDR in de naam.
-        assertEquals("IMG1-lr.jpg", OutputName.of(item("IMG1.jpg", path = lightroom), lightroom, sdr = true))
-        // Zonder sdr is alles zoals het was.
+        assertEquals("IMG1-lr.jpg", OutputName.of(item("IMG1.jpg", path = lightroom), lightroom, OutputName.Tag.Sdr))
+        // Zonder soort is alles zoals het was.
         assertEquals("IMG1.jpg", OutputName.of(item("IMG1.jpg"), lightroom))
     }
 
     @Test fun anOutputCanHaveTheOldNameOrTheSdrName() {
-        assertEquals(listOf("IMG1.jpg", "IMG1-SDR.jpg"), OutputName.candidates(item("IMG1.jpg"), lightroom))
-        assertEquals(listOf("IMG1.jpg", "IMG1-SDR.jpg"), OutputName.candidates(item("IMG1.dng"), lightroom))
+        assertEquals(listOf("IMG1.jpg", "IMG1-SDR.jpg", "IMG1-HDR.jpg"), OutputName.candidates(item("IMG1.jpg"), lightroom))
+        assertEquals(listOf("IMG1.jpg", "IMG1-SDR.jpg", "IMG1-HDR.jpg"), OutputName.candidates(item("IMG1.dng"), lightroom))
         assertEquals(listOf("IMG1-lr.jpg"), OutputName.candidates(item("IMG1.jpg", path = lightroom), lightroom))
     }
 
@@ -132,33 +132,48 @@ class ConvertPlanTest {
         val raw = photo(item("B.dng"), Status.CameraVersion)
         val copy = photo(item("C.jpg"), Status.AsIs)
         val export = photo(item("D.jpg", path = lightroom), Status.LightroomExport)
-        val steps = ConvertPlan.of(listOf(converted, raw, copy, export), lightroom, emptySet()) { true }.steps.associate { it.photo.item.name to it.outName }
+        val steps = ConvertPlan.of(listOf(converted, raw, copy, export), lightroom, emptySet()) { OutputName.Tag.Sdr }.steps.associate { it.photo.item.name to it.outName }
         assertEquals(mapOf("A.jpg" to "A-SDR.jpg", "B.dng" to "B-SDR.jpg", "C.jpg" to "C.jpg", "D.jpg" to "D-lr.jpg"), steps)
     }
 
-    @Test fun withKeepHdrThePhotoKeepsItsNameButNotWhenItsStrengthIsZero() {
+    @Test fun withKeepHdrThePhotoGetsHdrButSdrWhenItsStrengthIsZero() {
         val a = photo(item("A.jpg"), Status.Convert, hdr = true)
         val b = photo(item("B.jpg"), Status.Convert, hdr = true)
         // De aanroeper zegt per foto of het SDR wordt: B heeft sterkte 0 en valt terug op SDR.
-        val steps = ConvertPlan.of(listOf(a, b), lightroom, emptySet()) { it === b }.steps.associate { it.photo.item.name to it.outName }
-        assertEquals(mapOf("A.jpg" to "A.jpg", "B.jpg" to "B-SDR.jpg"), steps)
+        val steps = ConvertPlan.of(listOf(a, b), lightroom, emptySet()) { if (it === b) OutputName.Tag.Sdr else OutputName.Tag.Hdr }.steps.associate { it.photo.item.name to it.outName }
+        assertEquals(mapOf("A.jpg" to "A-HDR.jpg", "B.jpg" to "B-SDR.jpg"), steps)
+    }
+
+    @Test fun keptHdrGetsHdrAtTheEndOfItsName() {
+        assertEquals("IMG1-HDR.jpg", OutputName.of(item("IMG1.jpg"), lightroom, OutputName.Tag.Hdr))
+        assertEquals("IMG1-HDR.jpg", OutputName.of(item("IMG1.dng"), lightroom, OutputName.Tag.Hdr))
+        assertEquals("IMG1-lr.jpg", OutputName.of(item("IMG1.jpg", path = lightroom), lightroom, OutputName.Tag.Hdr))
+        assertEquals(listOf("IMG1.jpg", "IMG1-SDR.jpg", "IMG1-HDR.jpg"), OutputName.candidates(item("IMG1.jpg"), lightroom))
+        assertEquals("IMG1-2-HDR.jpg", OutputName.versioned("IMG1-HDR.jpg", setOf("img1-hdr.jpg")))
+        val a = photo(item("A.jpg"), Status.Convert, hdr = true)
+        assertEquals(listOf("A-HDR.jpg"), ConvertPlan.of(listOf(a), lightroom, emptySet()) { OutputName.Tag.Hdr }.steps.map { it.outName })
+        // Een foto die al als SDR klaarstaat, krijgt er niet ongevraagd een HDR-versie bij; daarvoor is "Nieuwe versie maken".
+        val sdrThere = ConvertPlan.of(listOf(a), lightroom, setOf("A-SDR.jpg")) { OutputName.Tag.Hdr }
+        assertTrue(sdrThere.steps.isEmpty()); assertEquals(listOf(a), sdrThere.existing)
+        val next = ConvertPlan.of(listOf(a), lightroom, setOf("A-SDR.jpg"), newVersion = true) { OutputName.Tag.Hdr }
+        assertEquals(listOf("A-HDR.jpg"), next.steps.map { it.outName })
     }
 
     @Test fun anOutputFromBeforeSdrStillCountsAsThere() {
         val a = photo(item("IMG1.jpg"), Status.Convert, hdr = true)
         // De oude naam staat er: niet nog eens omzetten onder de nieuwe.
-        val old = ConvertPlan.of(listOf(a), lightroom, setOf("IMG1.jpg")) { true }
+        val old = ConvertPlan.of(listOf(a), lightroom, setOf("IMG1.jpg")) { OutputName.Tag.Sdr }
         assertTrue(old.steps.isEmpty()); assertEquals(listOf(a), old.existing)
         // De nieuwe naam ook.
-        val fresh = ConvertPlan.of(listOf(a), lightroom, setOf("img1-sdr.jpg")) { true }
+        val fresh = ConvertPlan.of(listOf(a), lightroom, setOf("img1-sdr.jpg")) { OutputName.Tag.Sdr }
         assertTrue(fresh.steps.isEmpty()); assertEquals(listOf(a), fresh.existing)
     }
 
     @Test fun aNewVersionNextToAnOldOutputIsTheSdrName() {
         val a = photo(item("IMG1.jpg"), Status.Convert, hdr = true)
-        val first = ConvertPlan.of(listOf(a), lightroom, setOf("IMG1.jpg"), newVersion = true) { true }
+        val first = ConvertPlan.of(listOf(a), lightroom, setOf("IMG1.jpg"), newVersion = true) { OutputName.Tag.Sdr }
         assertEquals(listOf("IMG1-SDR.jpg"), first.steps.map { it.outName })
-        val second = ConvertPlan.of(listOf(a), lightroom, setOf("IMG1.jpg", "IMG1-SDR.jpg"), newVersion = true) { true }
+        val second = ConvertPlan.of(listOf(a), lightroom, setOf("IMG1.jpg", "IMG1-SDR.jpg"), newVersion = true) { OutputName.Tag.Sdr }
         assertEquals(listOf("IMG1-2-SDR.jpg"), second.steps.map { it.outName })
     }
 }
