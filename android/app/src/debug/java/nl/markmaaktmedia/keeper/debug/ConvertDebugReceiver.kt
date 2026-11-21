@@ -112,8 +112,8 @@ class ConvertDebugReceiver : BroadcastReceiver() {
                 val graph = context.applicationContext.graph
                 runBlocking {
                     when (op) {
-                        "preview" -> { graph.prefs.setDismissedUpdate(""); graph.updater.showPreview() }
-                        "fail" -> graph.updater.reportInstallFailure("GitHub kan niet worden bereikt")
+                        "preview" -> graph.updater.showPreview()
+                        "fail" -> graph.updater.showFailurePreview("GitHub kan niet worden bereikt")
                         "clear" -> graph.updater.reset()
                     }
                 }

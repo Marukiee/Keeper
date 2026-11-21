@@ -1,8 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Keeper</string>
-    <string name="channel_update">Updates</string>
-    <string name="channel_update_desc">Notifications about new versions of Keeper</string>
 
     <string name="nav_gallery">Gallery</string>
     <string name="nav_edit">Edit</string>
@@ -281,11 +279,4 @@
         <item quantity="one">%1$d original moved to the trash</item>
         <item quantity="other">%1$d originals moved to the trash</item>
     </plurals>
-    <string name="update_card_title">New version %1$s</string>
-    <string name="update_card_update">Update</string>
-    <string name="update_card_progress">%1$s of %2$s MB</string>
-    <string name="update_card_installing">Installing…</string>
-    <string name="update_card_installing_title">Installing %1$s</string>
-    <string name="update_card_installing_sub">The app restarts shortly</string>
-    <string name="update_card_retry">Retry</string>
 </resources>

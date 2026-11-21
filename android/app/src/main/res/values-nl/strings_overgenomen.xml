@@ -28,21 +28,7 @@
     <string name="swipe_delete">Verwijder</string>
     <string name="swipe_pin">Vastpinnen</string>
     <string name="swipe_unpin">Losmaken</string>
-    <string name="update_allow">Toestaan</string>
     <string name="update_available">Keeper %1$s is beschikbaar</string>
-    <string name="update_confirm_hint">Android wil dat je bevestigt</string>
     <string name="update_downloading">Downloaden %1$d%%</string>
-    <string name="update_failed">De update is mislukt</string>
-    <string name="update_later">Later</string>
     <string name="update_needs_permission">Sta installeren vanuit Keeper toe en kom terug</string>
-    <string name="update_on_version">Je hebt %1$s</string>
-    <string name="update_ready_text">Tik om de update af te ronden</string>
-    <string name="update_ready_title">Keeper %1$s staat klaar om te installeren</string>
-    <string name="update_reason_cancelled">De installatie is geannuleerd</string>
-    <string name="update_reason_damaged">De download is beschadigd (de controlesom klopt niet)</string>
-    <string name="update_reason_empty">De download was leeg</string>
-    <string name="update_reason_installer">De installatie kon niet worden afgerond</string>
-    <string name="update_reason_no_apk">Bij die versie zit geen appbestand</string>
-    <string name="update_reason_status">Het downloaden mislukte (status %1$d)</string>
-    <string name="update_reason_unreachable">GitHub is niet bereikbaar</string>
 </resources>

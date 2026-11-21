@@ -22,3 +22,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "Keeper"
 include(":app")
+// De gedeelde updater en updatekaart; in elke app dezelfde map (zie markupdate/README.md).
+include(":markupdate:core", ":markupdate:card")

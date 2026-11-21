@@ -26,9 +26,6 @@ class KeeperPrefs(private val context: Context) {
     private val defaultSince = System.currentTimeMillis() - 7 * DAY_MS
 
     private object K {
-        val autoUpdate = booleanPreferencesKey("auto_update_check")
-        val lastCheck = longPreferencesKey("last_update_check")
-        val dismissed = stringPreferencesKey("dismissed_update")
         val skipped = stringSetPreferencesKey("skipped")
         val cameraVersion = stringSetPreferencesKey("camera_version")
         val rejected = stringSetPreferencesKey("rejected")
@@ -54,12 +51,6 @@ class KeeperPrefs(private val context: Context) {
         val convertPaused = booleanPreferencesKey("convert_paused")
     }
 
-    val autoUpdateCheck: Flow<Boolean> = data.map { it[K.autoUpdate] ?: true }
-    suspend fun setAutoUpdateCheck(on: Boolean) = edit { it[K.autoUpdate] = on }
-    val lastUpdateCheck: Flow<Long> = data.map { it[K.lastCheck] ?: 0L }
-    suspend fun setLastUpdateCheck(ms: Long) = edit { it[K.lastCheck] = ms }
-    val dismissedUpdate: Flow<String?> = data.map { it[K.dismissed] }
-    suspend fun setDismissedUpdate(tag: String) = edit { it[K.dismissed] = tag }
 
     /** Bestandsnamen die Mark heeft overgeslagen (naar links geveegd). De naam is uniek in DCIM/Camera. */
     val skipped: Flow<Set<String>> = data.map { it[K.skipped] ?: emptySet() }.distinctUntilChanged()

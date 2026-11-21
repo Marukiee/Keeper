@@ -9,12 +9,20 @@ import nl.markmaaktmedia.keeper.convert.ConvertRepository
 import nl.markmaaktmedia.keeper.convert.OriginalsHider
 import nl.markmaaktmedia.keeper.data.KeeperPrefs
 import nl.markmaaktmedia.keeper.scan.MediaScanner
-import nl.markmaaktmedia.keeper.update.UpdateRepository
+import nl.markmaaktmedia.markupdate.MarkUpdate
+import nl.markmaaktmedia.markupdate.MarkUpdateConfig
 
 /** De losse onderdelen van de app, op één plek, zoals in Tandem. */
 class Graph(context: Context) {
     val prefs = KeeperPrefs(context)
-    val updater = UpdateRepository(context, prefs)
+    // De gedeelde updater (module markupdate). Hier opgezet, want de ontvanger van de installer gebruikt hetzelfde exemplaar.
+    val updater = MarkUpdate.init(
+        context,
+        MarkUpdateConfig(
+            owner = BuildConfig.GITHUB_OWNER, repo = BuildConfig.GITHUB_REPO, apkAsset = "Keeper.apk",
+            currentVersion = BuildConfig.VERSION_NAME, appName = "Keeper", notificationIcon = R.drawable.ic_stat_keeper,
+        ),
+    )
     val scanner = MediaScanner(context, prefs)
     val converter = ConvertRepository(context.applicationContext, prefs, scanner)
     val hider = OriginalsHider(context.applicationContext, prefs)
@@ -36,17 +44,12 @@ val Context.graph: Graph
     get() = (applicationContext as KeeperApp).graph
 
 object Channels {
-    const val UPDATE = "update"
     /** De voortgang van het omzetten (stil) en het verslag aan het eind (met geluid). */
     const val CONVERT = "convert"
     const val CONVERT_DONE = "convert_done"
 
     fun create(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(
-            NotificationChannel(UPDATE, context.getString(R.string.channel_update), NotificationManager.IMPORTANCE_DEFAULT)
-                .apply { description = context.getString(R.string.channel_update_desc) },
-        )
         manager.createNotificationChannel(
             NotificationChannel(CONVERT, context.getString(R.string.channel_convert), NotificationManager.IMPORTANCE_LOW)
                 .apply { description = context.getString(R.string.channel_convert_desc) },

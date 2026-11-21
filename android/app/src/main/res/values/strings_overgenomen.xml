@@ -28,21 +28,7 @@
     <string name="swipe_delete">Delete</string>
     <string name="swipe_pin">Pin</string>
     <string name="swipe_unpin">Unpin</string>
-    <string name="update_allow">Allow</string>
     <string name="update_available">Keeper %1$s is available</string>
-    <string name="update_confirm_hint">Android wants you to confirm</string>
     <string name="update_downloading">Downloading %1$d%%</string>
-    <string name="update_failed">The update failed</string>
-    <string name="update_later">Later</string>
     <string name="update_needs_permission">Allow installing from Keeper and come back</string>
-    <string name="update_on_version">You have %1$s</string>
-    <string name="update_ready_text">Tap to finish the update</string>
-    <string name="update_ready_title">Keeper %1$s is ready to install</string>
-    <string name="update_reason_cancelled">The installation was cancelled</string>
-    <string name="update_reason_damaged">The download is damaged (the checksum does not match)</string>
-    <string name="update_reason_empty">The download was empty</string>
-    <string name="update_reason_installer">The installation could not be completed</string>
-    <string name="update_reason_no_apk">This version has no app file</string>
-    <string name="update_reason_status">The download failed (status %1$d)</string>
-    <string name="update_reason_unreachable">GitHub cannot be reached</string>
 </resources>

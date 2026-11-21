@@ -1,4 +1,4 @@
-package nl.markmaaktmedia.keeper.ui.update
+package nl.markmaaktmedia.markupdate.ui
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedContentTransitionScope
@@ -26,6 +26,9 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -42,13 +45,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
@@ -57,9 +61,11 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
@@ -69,47 +75,42 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
 import java.util.Locale
-import kotlinx.coroutines.launch
-import nl.markmaaktmedia.keeper.R
-import nl.markmaaktmedia.keeper.graph
-import nl.markmaaktmedia.keeper.ui.components.bouncyClickable
-import nl.markmaaktmedia.keeper.ui.theme.KeeperIcons
-import nl.markmaaktmedia.keeper.ui.theme.KeeperMotion
-import nl.markmaaktmedia.keeper.ui.theme.LocalKeeperExtraColors
-import nl.markmaaktmedia.keeper.ui.theme.PillShape
-import nl.markmaaktmedia.keeper.update.ReleaseInfo
-import nl.markmaaktmedia.keeper.update.UpdateState
-import nl.markmaaktmedia.keeper.update.releaseHighlights
+import nl.markmaaktmedia.markupdate.MarkUpdate
+import nl.markmaaktmedia.markupdate.MarkUpdater
+import nl.markmaaktmedia.markupdate.ReleaseInfo
+import nl.markmaaktmedia.markupdate.UpdateState
+import nl.markmaaktmedia.markupdate.releaseHighlights
 
-/** Where the card is: waiting for a tap, downloading, or (the download is done) installing. */
+/** Waar de kaart is: wachten op een tik, downloaden of (de download is klaar) installeren. */
 private enum class Phase { Rest, Busy, Installing }
 
-/** What the card shows, kept while it slides away: by then the state has moved on and would change the card on its way out. */
+/** Wat de kaart toont, bewaard terwijl hij wegschuift: dan is de toestand al verder en zou hij de kaart onderweg veranderen. */
 private class Shown(var release: ReleaseInfo? = null, var failure: UpdateState.Failed? = null, var phase: Phase = Phase.Rest)
 
-private val CardShape = RoundedCornerShape(24.dp)
 private val IconSize = 46.dp
 private val ButtonHeight = 46.dp
 
 /**
- * The card at the top of the app when a new version is out: an icon, "New version X", what is new in two short lines, and Later and
- * Update side by side across the whole width. Update morphs into a progress bar over the whole card while Later slides away; when the
- * download is done it installs at once (no second tap: see [nl.markmaaktmedia.keeper.update.UpdateRepository.install]) and the bar
- * says so. Android asks for a confirmation itself the first time, or when it will not install quietly; the question opens by itself.
+ * De kaart bovenaan de app als er een nieuwe versie is: een icoon, "Nieuwe versie X", in twee korte regels wat er nieuw is, en Later en
+ * Bijwerken naast elkaar over de hele breedte. Bijwerken wordt een voortgangsbalk over de hele kaart terwijl Later wegschuift; is de
+ * download klaar, dan installeert de app meteen (geen tweede tik) en zegt de balk dat. Android vraagt de eerste keer zelf om een
+ * bevestiging, of als hij niet stil wil installeren; die vraag opent vanzelf.
+ *
+ * Kleuren, lettertypen en hoeken komen uit [androidx.compose.material3.MaterialTheme]; [style] is voor wat per app anders is.
  */
 @Composable
-fun UpdateCard(modifier: Modifier = Modifier) {
-    val context = LocalContext.current
-    val graph = context.graph
-    val updater = graph.updater
+fun UpdateCard(
+    modifier: Modifier = Modifier,
+    style: UpdateCardStyle = UpdateCardStyle(),
+    updater: MarkUpdater = MarkUpdate.get(),
+) {
     val state by updater.state.collectAsState()
-    val dismissed by graph.prefs.dismissedUpdate.collectAsState(initial = null)
-    val scope = rememberCoroutineScope()
+    val dismissed by updater.dismissed.collectAsState()
 
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
-        // Back from the "install unknown apps" screen with the switch on: carry on where it stopped (in the app's scope, not this screen's).
+        // Terug van het scherm "onbekende apps installeren" met de schakelaar aan: ga door waar het stopte (in de scope van de updater, niet van dit scherm).
         updater.resume()
-        // An update that finished downloading while the app was out of sight asks its question now.
+        // Een update die klaar was terwijl de app niet in beeld was, stelt zijn vraag nu.
         updater.resumeConfirmation()
     }
 
@@ -123,7 +124,7 @@ fun UpdateCard(modifier: Modifier = Modifier) {
         else -> null
     }
     val failed = state as? UpdateState.Failed
-    // A failure stays until it is retried or the app is reopened; a release once put off with Later stays hidden.
+    // Een mislukking blijft staan tot hij opnieuw geprobeerd is of de app opnieuw opent; een release waar "Later" voor gekozen is blijft weg.
     val visible = failed != null || (release != null && release.tag != dismissed)
     val shown = remember { Shown() }
     if (visible) {
@@ -138,29 +139,30 @@ fun UpdateCard(modifier: Modifier = Modifier) {
 
     AnimatedVisibility(
         visible = visible,
-        enter = fadeIn(KeeperMotion.fadeSpec()) + expandVertically(KeeperMotion.sizeSpring()),
-        exit = fadeOut(KeeperMotion.fadeSpec()) + shrinkVertically(KeeperMotion.sizeSpring()),
+        enter = fadeIn(style.motion.fade()) + expandVertically(style.motion.sizeSpring()),
+        exit = fadeOut(style.motion.fade()) + shrinkVertically(style.motion.sizeSpring()),
         modifier = modifier,
     ) {
         val failure = shown.failure
         val shownRelease = shown.release
         when {
-            failure != null -> FailedCard(failure.reason) { updater.startRetry() }
+            failure != null -> FailedCard(failure.reason, style) { updater.startRetry() }
             shownRelease != null -> UpdateContent(
                 release = shownRelease,
                 phase = shown.phase,
                 state = state,
                 currentVersion = updater.currentVersion,
+                style = style,
                 onBar = {
                     when (val s = state) {
                         is UpdateState.Available -> updater.startUpdate(s.release)
                         is UpdateState.NeedsPermission -> updater.openInstallPermissionSettings()
-                        // Android did not let the question open by itself (the app was not in front): the bar opens it.
+                        // Android liet de vraag niet vanzelf openen (de app stond niet voorin): de balk opent hem.
                         is UpdateState.AwaitingConfirmation -> updater.launchConfirmation()
                         else -> Unit
                     }
                 },
-                onLater = { scope.launch { graph.prefs.setDismissedUpdate(shownRelease.tag) } },
+                onLater = { updater.dismiss(shownRelease.tag) },
             )
         }
     }
@@ -168,34 +170,33 @@ fun UpdateCard(modifier: Modifier = Modifier) {
 
 @Composable
 private fun UpdateContent(
-    release: ReleaseInfo, phase: Phase, state: UpdateState, currentVersion: String, onBar: () -> Unit, onLater: () -> Unit,
+    release: ReleaseInfo, phase: Phase, state: UpdateState, currentVersion: String, style: UpdateCardStyle, onBar: () -> Unit, onLater: () -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
     val dutch = LocalConfiguration.current.locales[0].language == "nl"
     val lines = remember(release.body, dutch) { releaseHighlights(release.body, dutch) }
-    val real = (state as? UpdateState.Downloading)?.progress
-    // The real progress; the bar and the numbers follow it, the bar a little softer (a spring) since it arrives in steps of a percent.
+    // De echte voortgang; de balk volgt hem iets zachter (een veer), want hij komt binnen in stappen van een procent.
     val progress = when (phase) {
         Phase.Rest -> 0f
-        Phase.Busy -> real ?: 0f
+        Phase.Busy -> (state as? UpdateState.Downloading)?.progress ?: 0f
         Phase.Installing -> 1f
     }
-    Column(Modifier.fillMaxWidth().clip(CardShape).background(colors.surfaceContainer).padding(16.dp)) {
+    Column(Modifier.fillMaxWidth().clip(style.shape).background(colors.surfaceContainer).padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            UpdateIcon(done = phase == Phase.Installing)
+            UpdateIcon(done = phase == Phase.Installing, style = style)
             AnimatedContent(
-                targetState = phase, transitionSpec = slideUp(2), modifier = Modifier.weight(1f), label = "updateText",
+                targetState = phase, transitionSpec = slideUp(2, style), modifier = Modifier.weight(1f), label = "updateText",
             ) { p ->
                 Column(Modifier.fillMaxWidth()) {
                     Text(
-                        stringResource(if (p == Phase.Installing) R.string.update_card_installing_title else R.string.update_card_title, release.versionName),
+                        stringResource(if (p == Phase.Installing) R.string.markupdate_installing_title else R.string.markupdate_title, release.versionName),
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold), maxLines = 1, overflow = TextOverflow.Ellipsis,
                     )
                     Text(
                         when (p) {
-                            Phase.Rest -> if (state is UpdateState.NeedsPermission) stringResource(R.string.update_needs_permission) else stringResource(R.string.update_on_version, currentVersion)
+                            Phase.Rest -> if (state is UpdateState.NeedsPermission) stringResource(R.string.markupdate_needs_permission) else stringResource(R.string.markupdate_on_version, currentVersion)
                             Phase.Busy -> downloaded(release, progress)
-                            Phase.Installing -> if (state is UpdateState.AwaitingConfirmation) stringResource(R.string.update_confirm_hint) else stringResource(R.string.update_card_installing_sub)
+                            Phase.Installing -> if (state is UpdateState.AwaitingConfirmation) stringResource(R.string.markupdate_confirm_hint) else stringResource(R.string.markupdate_installing_sub)
                         },
                         // Gelijke cijferbreedte alleen bij de teller, zodat die niet heen en weer springt; in een versienummer maakt het de punten te wijd.
                         style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = if (p == Phase.Busy) "tnum" else null),
@@ -204,46 +205,47 @@ private fun UpdateContent(
                 }
             }
         }
-        // Two short lines of what is new, under the title; they slide away when the install starts.
+        // Twee korte regels van wat er nieuw is, onder de titel; ze schuiven weg als de installatie begint.
         AnimatedVisibility(
             visible = lines.isNotEmpty() && phase != Phase.Installing,
-            enter = fadeIn(KeeperMotion.fadeSpec()) + expandVertically(KeeperMotion.sizeSpring()),
-            exit = fadeOut(KeeperMotion.fadeSpec()) + shrinkVertically(KeeperMotion.sizeSpring()),
+            enter = fadeIn(style.motion.fade()) + expandVertically(style.motion.sizeSpring()),
+            exit = fadeOut(style.motion.fade()) + shrinkVertically(style.motion.sizeSpring()),
         ) {
             Column(Modifier.padding(start = IconSize + 12.dp, top = 10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 lines.forEach { Text("• $it", style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis) }
             }
         }
         Actions(
-            phase = phase, progress = progress,
-            restLabel = stringResource(if (state is UpdateState.NeedsPermission) R.string.update_allow else R.string.update_card_update),
+            phase = phase, progress = progress, style = style,
+            restLabel = stringResource(if (state is UpdateState.NeedsPermission) R.string.markupdate_allow else R.string.markupdate_update),
             barEnabled = phase == Phase.Rest || state is UpdateState.AwaitingConfirmation,
             onBar = onBar, onLater = onLater,
         )
     }
 }
 
-/** "6.3 of 22 MB", or just the percentage when the release does not say how big the file is. */
+/** "6,3 van 22 MB", of alleen het percentage als de release niet zegt hoe groot het bestand is. */
 @Composable
 private fun downloaded(release: ReleaseInfo, progress: Float): String {
     val total = release.apkSizeBytes
-    if (total <= 0) return stringResource(R.string.update_downloading, (progress * 100).toInt())
+    if (total <= 0) return stringResource(R.string.markupdate_downloading, (progress * 100).toInt())
     val symbols = DecimalFormatSymbols(Locale.getDefault())
     val done = DecimalFormat("0.0", symbols).format(total * progress / 1e6)
     val all = DecimalFormat("0.#", symbols).format(total / 1e6)
-    return stringResource(R.string.update_card_progress, done, all)
+    return stringResource(R.string.markupdate_progress, done, all)
 }
 
-/** The square icon: a sparkle on the primary container, a green circle with a tick once it installs. */
+/** Het vierkante icoon: een sparkle op de primaire container, een groene cirkel met vinkje zodra het installeert. */
 @Composable
-private fun UpdateIcon(done: Boolean) {
+private fun UpdateIcon(done: Boolean, style: UpdateCardStyle) {
     val colors = MaterialTheme.colorScheme
-    val green = LocalKeeperExtraColors.current.charging
-    val radius by animateDpAsState(if (done) IconSize / 2 else 15.dp, KeeperMotion.spatial(), label = "updateIconRadius")
+    val green = style.successColor.takeIf { it != Color.Unspecified }
+        ?: if (colors.background.luminance() < 0.5f) Color(0xFF30D158) else Color(0xFF1A8F37)
+    val radius by animateDpAsState(if (done) IconSize / 2 else 15.dp, style.motion.spatial(), label = "updateIconRadius")
     val fill by animateColorAsState(
-        if (done) green.copy(alpha = 0.2f).compositeOver(colors.surfaceContainer) else colors.primaryContainer, KeeperMotion.colourSpec(), label = "updateIconFill",
+        if (done) green.copy(alpha = 0.2f).compositeOver(colors.surfaceContainer) else colors.primaryContainer, style.motion.colour(), label = "updateIconFill",
     )
-    val ink by animateColorAsState(if (done) green else colors.onPrimaryContainer, KeeperMotion.colourSpec(), label = "updateIconInk")
+    val ink by animateColorAsState(if (done) green else colors.onPrimaryContainer, style.motion.colour(), label = "updateIconInk")
     Box(Modifier.size(IconSize).clip(RoundedCornerShape(radius)).background(fill), contentAlignment = Alignment.Center) {
         AnimatedContent(
             targetState = done,
@@ -253,19 +255,20 @@ private fun UpdateIcon(done: Boolean) {
             },
             label = "updateIcon",
         ) { d ->
-            Icon(if (d) KeeperIcons.Check else KeeperIcons.Sparkle, contentDescription = null, tint = ink, modifier = Modifier.size(24.dp))
+            Icon(painterResource(if (d) R.drawable.markupdate_ic_check else R.drawable.markupdate_ic_sparkle), contentDescription = null, tint = ink, modifier = Modifier.size(24.dp))
         }
     }
 }
 
 /**
- * Later and Update share the width (one part and two parts). When the update starts Later shrinks to nothing and fades, and Update
- * grows into a bar over the whole width: the fill follows the download, the percentage sits in the middle. Done, the bar stays full
- * and says "Installing…" with a soft sheen.
+ * Later en Bijwerken delen de breedte (een deel en twee delen). Begint het bijwerken, dan krimpt Later tot niets en vervaagt, en Bijwerken
+ * groeit tot een balk over de hele breedte: de vulling volgt de download, het percentage staat in het midden. Is het klaar, dan blijft
+ * de balk vol en zegt hij "Installeren…" met een zachte glans.
  */
 @Composable
-private fun Actions(phase: Phase, progress: Float, restLabel: String, barEnabled: Boolean, onBar: () -> Unit, onLater: () -> Unit) {
+private fun Actions(phase: Phase, progress: Float, style: UpdateCardStyle, restLabel: String, barEnabled: Boolean, onBar: () -> Unit, onLater: () -> Unit) {
     val colors = MaterialTheme.colorScheme
+    val motion = style.motion
     val laterShare by animateFloatAsState(
         if (phase == Phase.Rest) 1f else 0f,
         spring(dampingRatio = 0.9f, stiffness = Spring.StiffnessMediumLow), label = "laterShare",
@@ -274,44 +277,45 @@ private fun Actions(phase: Phase, progress: Float, restLabel: String, barEnabled
     val laterAlpha by animateFloatAsState(if (phase == Phase.Rest) 1f else 0f, tween(260), label = "laterAlpha")
     val barFill by animateColorAsState(
         when (phase) { Phase.Rest -> colors.primary; Phase.Busy -> colors.surfaceContainerHighest; Phase.Installing -> colors.primaryContainer },
-        KeeperMotion.colourSpec(), label = "barFill",
+        motion.colour(), label = "barFill",
     )
-    val ink by animateColorAsState(if (phase == Phase.Rest) colors.onPrimary else colors.onPrimaryContainer, KeeperMotion.colourSpec(), label = "barInk")
-    val shownProgress by animateFloatAsState(progress, KeeperMotion.spatial(), label = "updateProgress")
+    val ink by animateColorAsState(if (phase == Phase.Rest) colors.onPrimary else colors.onPrimaryContainer, motion.colour(), label = "barInk")
+    val shownProgress by animateFloatAsState(progress, motion.spatial(), label = "updateProgress")
     val fillAlpha by animateFloatAsState(if (phase == Phase.Busy) 1f else 0f, tween(400), label = "fillAlpha")
+    val pill = RoundedCornerShape(percent = 50)
 
     Row(Modifier.padding(top = 14.dp).fillMaxWidth().height(ButtonHeight)) {
         if (laterShare > 0.005f) {
             val share = laterShare.coerceIn(0f, 1f)
             Box(
                 Modifier.weight(share.coerceAtLeast(0.001f)).fillMaxHeight().graphicsLayer { alpha = laterAlpha }
-                    .clip(PillShape).background(colors.surfaceContainerHighest).bouncyClickable(enabled = phase == Phase.Rest, onClick = onLater),
+                    .clip(pill).background(colors.surfaceContainerHighest).pressable(phase == Phase.Rest, style, onLater),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    stringResource(R.string.update_later), style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                    stringResource(R.string.markupdate_later), style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
                     color = colors.primary, maxLines = 1, softWrap = false,
                 )
             }
             Spacer(Modifier.width(8.dp * share))
         }
         Box(
-            Modifier.weight(2f).fillMaxHeight().clip(PillShape).background(barFill).bouncyClickable(enabled = barEnabled, onClick = onBar),
+            Modifier.weight(2f).fillMaxHeight().clip(pill).background(barFill).pressable(barEnabled, style, onBar),
         ) {
             Box(
                 Modifier.fillMaxHeight().fillMaxWidth(shownProgress.coerceIn(0f, 1f)).graphicsLayer { alpha = fillAlpha }
-                    .clip(PillShape).background(colors.primaryContainer),
+                    .clip(pill).background(colors.primaryContainer),
             )
             if (phase == Phase.Installing) Sheen(Modifier.matchParentSize())
             AnimatedContent(
-                targetState = phase, transitionSpec = slideUp(3), modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center, label = "updateLabel",
+                targetState = phase, transitionSpec = slideUp(3, style), modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center, label = "updateLabel",
             ) { p ->
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(
                         when (p) {
                             Phase.Rest -> restLabel
                             Phase.Busy -> "${(progress * 100).toInt()}%"
-                            Phase.Installing -> stringResource(R.string.update_card_installing)
+                            Phase.Installing -> stringResource(R.string.markupdate_installing)
                         },
                         style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold, fontFeatureSettings = "tnum"), color = ink, maxLines = 1,
                     )
@@ -321,7 +325,7 @@ private fun Actions(phase: Phase, progress: Float, restLabel: String, barEnabled
     }
 }
 
-/** A soft light that runs over the bar while it installs. */
+/** Een zacht licht dat over de balk loopt zolang het installeert. */
 @Composable
 private fun Sheen(modifier: Modifier) {
     val x by rememberInfiniteTransition(label = "sheen").animateFloat(0f, 1f, infiniteRepeatable(tween(1200, easing = LinearEasing)), label = "sheenX")
@@ -337,31 +341,45 @@ private fun Sheen(modifier: Modifier) {
     )
 }
 
-/** The old text slides up and away, the new one comes in from below: a spring for the movement, tweens for the fade. */
-private fun slideUp(divisor: Int): AnimatedContentTransitionScope<Phase>.() -> ContentTransform = {
+/** De oude tekst schuift omhoog weg, de nieuwe komt van onder: een veer voor de beweging, tweens voor het vervagen. */
+private fun slideUp(divisor: Int, style: UpdateCardStyle): AnimatedContentTransitionScope<Phase>.() -> ContentTransform = {
     val move: FiniteAnimationSpec<IntOffset> = spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow, visibilityThreshold = IntOffset.VisibilityThreshold)
-    (slideInVertically(move) { it / divisor } + fadeIn(tween(260))) togetherWith (slideOutVertically(tween(260, easing = KeeperMotion.Standard)) { -it / divisor } + fadeOut(tween(160)))
+    (slideInVertically(move) { it / divisor } + fadeIn(tween(260))) togetherWith
+        (slideOutVertically(tween(260, easing = style.motion.easing)) { -it / divisor } + fadeOut(tween(160)))
 }
 
-/** The download or the install failed: why, and one wide button to try again. */
+/** Het downloaden of installeren mislukte: waarom, en één brede knop om opnieuw te proberen. */
 @Composable
-private fun FailedCard(reason: String, onRetry: () -> Unit) {
+private fun FailedCard(reason: String, style: UpdateCardStyle, onRetry: () -> Unit) {
     val colors = MaterialTheme.colorScheme
-    Column(Modifier.fillMaxWidth().clip(CardShape).background(colors.surfaceContainer).padding(16.dp)) {
+    val pill = RoundedCornerShape(percent = 50)
+    Column(Modifier.fillMaxWidth().clip(style.shape).background(colors.surfaceContainer).padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Box(Modifier.size(IconSize).clip(RoundedCornerShape(15.dp)).background(colors.errorContainer), contentAlignment = Alignment.Center) {
-                Icon(KeeperIcons.Error, contentDescription = null, tint = colors.onErrorContainer, modifier = Modifier.size(24.dp))
+                Icon(painterResource(R.drawable.markupdate_ic_error), contentDescription = null, tint = colors.onErrorContainer, modifier = Modifier.size(24.dp))
             }
             Column(Modifier.weight(1f)) {
-                Text(stringResource(R.string.update_failed), style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(stringResource(R.string.markupdate_failed), style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(reason, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
         }
         Box(
-            Modifier.padding(top = 14.dp).fillMaxWidth().height(ButtonHeight).clip(PillShape).background(colors.primary).bouncyClickable(onClick = onRetry),
+            Modifier.padding(top = 14.dp).fillMaxWidth().height(ButtonHeight).clip(pill).background(colors.primary).pressable(true, style, onRetry),
             contentAlignment = Alignment.Center,
         ) {
-            Text(stringResource(R.string.update_card_retry), style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold), color = colors.onPrimary)
+            Text(stringResource(R.string.markupdate_retry), style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold), color = colors.onPrimary)
         }
     }
+}
+
+/**
+ * Een tik die terugpraat: de knop duikt onder de vinger en veert terug, met de rimpel eronder. De rimpel eerst en het duiken erna, zodat
+ * de rimpel de hele knop vult terwijl de inhoud krimpt.
+ */
+private fun Modifier.pressable(enabled: Boolean, style: UpdateCardStyle, onClick: () -> Unit): Modifier = composed {
+    val source = remember { MutableInteractionSource() }
+    val pressed by source.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed && enabled) style.pressedScale else 1f, style.motion.press(), label = "pressScale")
+    clickable(interactionSource = source, indication = ripple(), enabled = enabled, role = Role.Button, onClick = onClick)
+        .graphicsLayer { scaleX = scale; scaleY = scale }
 }

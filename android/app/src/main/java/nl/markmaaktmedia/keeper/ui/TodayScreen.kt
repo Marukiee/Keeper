@@ -27,7 +27,8 @@ import nl.markmaaktmedia.keeper.ui.components.SecondaryPillButton
 import nl.markmaaktmedia.keeper.ui.components.SectionHeader
 import nl.markmaaktmedia.keeper.ui.components.SettingsGroup
 import nl.markmaaktmedia.keeper.ui.theme.KeeperIcons
-import nl.markmaaktmedia.keeper.ui.update.UpdateCard
+import nl.markmaaktmedia.keeper.ui.update.keeperUpdateStyle
+import nl.markmaaktmedia.markupdate.ui.UpdateCard
 
 @Composable
 fun TodayScreen(
@@ -45,7 +46,7 @@ fun TodayScreen(
     onRemoveOriginals: () -> Unit = {},
 ) {
     LazyColumn(Modifier.fillMaxWidth(), contentPadding = contentPadding, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item { UpdateCard(Modifier.padding(top = 8.dp)) }
+        item { UpdateCard(Modifier.padding(top = 8.dp), style = keeperUpdateStyle()) }
         item { ScreenHeader(stringResource(R.string.today_title), if (state.sinceMs > 0) stringResource(R.string.today_since, formatDay(state.sinceMs)) else null, onBack) }
         when {
             !hasPermission -> item {

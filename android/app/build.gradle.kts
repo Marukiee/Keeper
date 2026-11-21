@@ -122,6 +122,8 @@ dependencies {
     debugImplementation(libs.androidx.ui.tooling)
 
     implementation(libs.androidx.datastore.preferences)
+    // Updater en updatekaart (de kaart haalt de kern mee).
+    implementation(project(":markupdate:card"))
     implementation(libs.okhttp)
 
     testImplementation(libs.junit)

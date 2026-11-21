@@ -1,6 +1,5 @@
-package nl.markmaaktmedia.keeper.update
+package nl.markmaaktmedia.markupdate
 
-import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -57,11 +56,7 @@ class ReleaseHighlightsTest {
         assertTrue(releaseHighlights("", dutch = false).isEmpty())
     }
 
-    @Test fun theHandWrittenNotesGiveTwoShortLines() {
-        val notes = File("../../.github/release-notes/v0.1.0.md")
-        assertTrue("notities ontbreken: ${notes.absolutePath}", notes.exists())
-        val lines = releaseHighlights(notes.readText(), dutch = false)
-        assertEquals(2, lines.size)
-        assertTrue(lines.toString(), lines[0].startsWith("Gallery of your new photos"))
+    @Test fun maxLimitsTheNumberOfLines() {
+        assertEquals(1, releaseHighlights(both, dutch = false, max = 1).size)
     }
 }

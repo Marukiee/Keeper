@@ -1,4 +1,4 @@
-package nl.markmaaktmedia.keeper.update
+package nl.markmaaktmedia.markupdate
 
 /**
  * De korte regels voor op de updatekaart: de eerste punten van wat er nieuw is, in de taal van de app als de release die heeft.

@@ -34,7 +34,7 @@ import nl.markmaaktmedia.keeper.ui.settings.seedLabel
 import nl.markmaaktmedia.keeper.ui.theme.KeeperIcons
 import nl.markmaaktmedia.keeper.ui.theme.LocalAppearance
 import nl.markmaaktmedia.keeper.ui.theme.ThemeMode
-import nl.markmaaktmedia.keeper.update.UpdateState
+import nl.markmaaktmedia.markupdate.UpdateState
 
 /** De categorieën op het overzicht, in groepen zoals in Tandem; elke opent een eigen pagina. */
 private enum class SettingsCategory(val page: SettingsPage, val title: Int) {
@@ -138,14 +138,14 @@ fun SettingsPageScreen(page: SettingsPage, onOpen: (SettingsPage) -> Unit, onBac
 fun UpdatesScreen(onBack: () -> Unit, contentPadding: PaddingValues) {
     val graph = LocalContext.current.graph
     val scope = rememberCoroutineScope()
-    val auto by graph.prefs.autoUpdateCheck.collectAsState(initial = true)
+    val auto by graph.updater.autoCheck.collectAsState()
     val state by graph.updater.state.collectAsState()
     LazyColumn(Modifier.fillMaxWidth(), contentPadding = contentPadding, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         item { ScreenHeader(stringResource(R.string.settings_updates), onBack = onBack) }
         item {
             SettingsGroup {
                 InfoRow(0, 3, KeeperIcons.Info, stringResource(R.string.settings_version), BuildConfig.VERSION_NAME)
-                SwitchRow(1, 3, KeeperIcons.Update, stringResource(R.string.settings_auto_update), stringResource(R.string.settings_auto_update_sub), auto, { scope.launch { graph.prefs.setAutoUpdateCheck(it) } })
+                SwitchRow(1, 3, KeeperIcons.Update, stringResource(R.string.settings_auto_update), stringResource(R.string.settings_auto_update_sub), auto, { graph.updater.setAutoCheck(it) })
                 ActionRow(
                     2, 3, KeeperIcons.Refresh, stringResource(R.string.settings_check_update),
                     when (val s = state) {
