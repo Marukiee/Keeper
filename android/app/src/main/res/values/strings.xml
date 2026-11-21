@@ -144,6 +144,7 @@
     <string name="convert_result_resized">%1$d saved at half the pixels, nothing visible lost</string>
     <string name="settings_quality_sub">Higher is sharper and bigger</string>
     <string name="settings_quality_estimate">About %1$s bits per pixel, so a 50 MP photo comes to about %2$s</string>
+    <string name="settings_quality_estimate_hdr_auto">About %1$s bits per pixel for the photo itself, plus about %3$s for the HDR layer that stays. A 50 MP photo then comes to about %2$s with Automatic resolution, or about %4$s with every pixel kept</string>
     <string name="settings_quality_estimate_hdr">About %1$s bits per pixel for the photo itself, plus about %3$s for the HDR layer that stays, so a 50 MP photo comes to about %2$s</string>
     <string name="settings_tonemap_sub">How the HDR highlights go to SDR</string>
     <string name="tonemap_licht">Bright</string>

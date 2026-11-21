@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import nl.markmaaktmedia.keeper.convert.Resolution
 import nl.markmaaktmedia.keeper.scan.Classifier
 import nl.markmaaktmedia.keeper.scan.JpegQuality
 import nl.markmaaktmedia.keeper.scan.Photo
@@ -35,18 +36,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val state: StateFlow<UiState> = combine(snapshot, graph.prefs.skipped, graph.prefs.cameraVersion, graph.prefs.rejected, sizeEstimate()) { snap, skipped, kept, rejected, estimate ->
         if (snap == null) UiState() else {
             val photos = Classifier.classify(snap.items, snap.probes, skipped, kept, snap.doneNames, snap.lightroomFolder, rejected)
-            UiState(false, photos, Classifier.summarize(photos, estimate.bitsPerPixel, estimate.keepsHdr), snap.sinceMs)
+            UiState(false, photos, Classifier.summarize(photos, estimate.bitsPerPixel, estimate.autoResolution, estimate.keepsHdr), snap.sinceMs)
         }
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, UiState())
 
-    private class SizeEstimate(val bitsPerPixel: Double, val keepsHdr: (Photo) -> Boolean)
+    private class SizeEstimate(val bitsPerPixel: Double, val keepsHdr: (Photo) -> Boolean, val autoResolution: Boolean = false)
 
     /** Wat de schatting van "straks ongeveer" nodig heeft: de kwaliteit, en per foto of de uitvoer HDR blijft (de instelling of Marks keuze, en sterkte 0 is SDR). */
     private fun sizeEstimate() = combine(
-        graph.prefs.quality, graph.prefs.keepHdr, graph.prefs.keepHdrByName, graph.prefs.hdrStrength, graph.prefs.hdrStrengthByName,
-    ) { quality, keep, keepByName, strength, strengthByName ->
-        SizeEstimate(JpegQuality.bitsPerPixel(quality)) { p -> (keepByName[p.item.name] ?: keep) && (strengthByName[p.item.name] ?: strength) > 0 }
-    }
+        combine(graph.prefs.quality, graph.prefs.keepHdr, graph.prefs.keepHdrByName, graph.prefs.hdrStrength, graph.prefs.hdrStrengthByName) { quality, keep, keepByName, strength, strengthByName ->
+            SizeEstimate(JpegQuality.bitsPerPixel(quality), { p -> (keepByName[p.item.name] ?: keep) && (strengthByName[p.item.name] ?: strength) > 0 })
+        },
+        graph.prefs.resolution,
+    ) { estimate, resolution -> SizeEstimate(estimate.bitsPerPixel, estimate.keepsHdr, Resolution.of(resolution) == Resolution.Auto) }
 
     fun refresh() {
         viewModelScope.launch { snapshot.value = graph.scanner.scan() }

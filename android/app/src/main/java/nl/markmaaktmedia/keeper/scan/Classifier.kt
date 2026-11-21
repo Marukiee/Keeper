@@ -1,5 +1,7 @@
 package nl.markmaaktmedia.keeper.scan
 
+import nl.markmaaktmedia.keeper.convert.ResolutionCheck
+
 /**
  * Bepaalt per bestand wat ermee gebeurt. Zuivere functie: dezelfde invoer geeft dezelfde uitkomst,
  * en er wordt niets gelezen of geschreven.
@@ -86,12 +88,19 @@ object Classifier {
     const val GAIN_MAP_SHARE = 0.16
     /** Dezelfde gain map in bits per pixel (gemiddeld 0,8 op die 45 foto's), voor als er geen bestandsgrootte is, zoals in Instellingen. */
     const val GAIN_MAP_BPP = 0.8
+    /**
+     * Met Resolutie Automatisch (alleen bij HDR behouden) gaan foto's van [ResolutionCheck.MIN_PIXELS] of meer meestal op de helft van de pixels: het hoofdbeeld wordt dan
+     * ongeveer 0,60 van zijn grootte, het bestand ongeveer 0,76 (de gain map blijft). Gemeten op de 45 foto's (2026-11-21): over de 40 grote foto's, waarvan er 38 gehalveerd
+     * werden, is de uitvoer gemiddeld 0,79 van die op alle pixels; zonder deze factor lag de schatting 26% te hoog.
+     */
+    const val AUTO_HALVING = 0.79
 
     /**
      * @param keepsHdr of de uitvoer van deze foto HDR blijft: dan blijft de gain map ongewijzigd mee (alleen het hoofdbeeld wordt kleiner), dus daar komt het
      *   aandeel [GAIN_MAP_SHARE] van het origineel bij. Zonder dat gaat het om de SDR-omzetting zonder gain map.
+     * @param autoResolution of Resolutie op Automatisch staat: HDR-uitvoer van grote foto's telt dan met [AUTO_HALVING].
      */
-    fun summarize(photos: List<Photo>, bitsPerPixel: Double = EXPECTED_BPP, keepsHdr: (Photo) -> Boolean = { false }): Summary {
+    fun summarize(photos: List<Photo>, bitsPerPixel: Double = EXPECTED_BPP, autoResolution: Boolean = false, keepsHdr: (Photo) -> Boolean = { false }): Summary {
         val going = photos.filter { it.goesAlong }
         var current = 0L
         var expected = 0L
@@ -101,7 +110,10 @@ object Classifier {
             expected += if (p.needsConversion) {
                 val image = p.item.width.toLong() * p.item.height * bitsPerPixel / 8
                 // Nooit groter dan het origineel: een gladde foto wordt veel kleiner dan deze schatting.
-                if (keepsHdr(p)) (minOf(now * (1 - GAIN_MAP_SHARE), image) + now * GAIN_MAP_SHARE).toLong()
+                if (keepsHdr(p)) {
+                    val kept = minOf(now * (1 - GAIN_MAP_SHARE), image) + now * GAIN_MAP_SHARE
+                    (if (autoResolution && p.item.width.toLong() * p.item.height >= ResolutionCheck.MIN_PIXELS) kept * AUTO_HALVING else kept).toLong()
+                }
                 else minOf(now, image.toLong())
             } else now
         }

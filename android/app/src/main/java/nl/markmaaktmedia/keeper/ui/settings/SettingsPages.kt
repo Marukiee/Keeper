@@ -152,7 +152,10 @@ internal fun ConvertPage(onBack: () -> Unit, contentPadding: PaddingValues) {
                 // Met HDR behouden zit de gain map (de HDR-laag) er ongewijzigd nog bij: dat is er per foto een flink stuk bij.
                 val gainMap = (50_000_000L * Classifier.GAIN_MAP_BPP / 8).toLong()
                 Text(
-                    if (keepHdr) stringResource(R.string.settings_quality_estimate_hdr, bppText, formatBytes(photo + gainMap), formatBytes(gainMap))
+                    if (keepHdr && Resolution.of(resolutionId) == Resolution.Auto) stringResource(
+                        R.string.settings_quality_estimate_hdr_auto, bppText, formatBytes(((photo + gainMap) * Classifier.AUTO_HALVING).toLong()), formatBytes(gainMap), formatBytes(photo + gainMap),
+                    )
+                    else if (keepHdr) stringResource(R.string.settings_quality_estimate_hdr, bppText, formatBytes(photo + gainMap), formatBytes(gainMap))
                     else stringResource(R.string.settings_quality_estimate, bppText, formatBytes(photo)),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

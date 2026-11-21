@@ -142,6 +142,7 @@
     <string name="convert_result_resized">%1$d op de helft van de pixels bewaard, niets zichtbaars verloren</string>
     <string name="settings_quality_sub">Hoger is scherper en groter</string>
     <string name="settings_quality_estimate">Ongeveer %1$s bit per pixel, een foto van 50 MP wordt dan ongeveer %2$s</string>
+    <string name="settings_quality_estimate_hdr_auto">Ongeveer %1$s bit per pixel voor de foto zelf, plus ongeveer %3$s voor de HDR-laag die blijft. Een foto van 50 MP wordt dan met Automatische resolutie ongeveer %2$s, of ongeveer %4$s als alle pixels blijven</string>
     <string name="settings_quality_estimate_hdr">Ongeveer %1$s bit per pixel voor de foto zelf, plus ongeveer %3$s voor de HDR-laag die blijft, een foto van 50 MP wordt dan ongeveer %2$s</string>
     <string name="settings_tonemap_sub">Hoe de HDR-lichten naar SDR gaan</string>
     <string name="tonemap_licht">Licht</string>

@@ -160,6 +160,18 @@ class ClassifierTest {
         assertEquals(true, hdr.expectedBytes > sdr.expectedBytes && hdr.expectedBytes <= hdr.currentBytes)
     }
 
+    @Test fun automaticResolutionShrinksTheHdrEstimateOfBigPhotosOnly() {
+        val big = item("IMG1.jpg", w = 8192, h = 6144, size = 18_000_000); val small = item("IMG2.jpg", w = 4000, h = 3000, size = 400_000)
+        val photos = Classifier.classify(listOf(big, small), mapOf(big.id to Probe(true), small.id to Probe(true)), emptySet(), setOf(big.name, small.name), emptySet(), "x/")
+        val full = Classifier.summarize(photos, 1.0) { true }
+        val auto = Classifier.summarize(photos, 1.0, autoResolution = true) { true }
+        // De grote foto telt met de factor, de kleine (onder 30 MP) niet.
+        assertEquals((6_291_456L + 2_880_000L) * Classifier.AUTO_HALVING + 400_000L, auto.expectedBytes.toDouble(), 4.0)
+        assertEquals(true, auto.expectedBytes < full.expectedBytes)
+        // SDR wordt nooit verkleind, ook niet met Automatisch.
+        assertEquals(Classifier.summarize(photos, 1.0) { false }.expectedBytes, Classifier.summarize(photos, 1.0, autoResolution = true) { false }.expectedBytes)
+    }
+
     // De naam in de uitvoermap bepaalt "klaar" (zie OutputName): per soort bron één vaste naam.
     @Test fun keptRawIsDoneWhenItsCameraVersionIsInTheOutputFolder() {
         val raw = item("IMG20261114133431.dng")
