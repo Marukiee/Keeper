@@ -72,14 +72,14 @@ class Converter(private val stripRows: Int = 256, private val log: (String) -> U
         val prepared = ConvertCore.prepare(first, settings, sample, w, h)
         val peak = prepared.peak
         val mapper = prepared.mapper
-        val contrast = prepared.contrast
+        val tone = prepared.tone
         log("piek $peak, kleurruimte $space, ${(System.nanoTime() - t0) / 1_000_000} ms")
         val sampler = GainMapSampler(layout.meta, gain, w, h, settings.strength)
         val segments = segmentsFor(layout.primary, layout, space)
 
         val scratches = List(workerCount) { Scratch(w, sampler.newScratch()) }
         encodeStrips(source, w, h, settings, segments, out, 0.1f, onProgress, cancelled) { raw, rowBytes, y0, r0, r1, worker, buf ->
-            ConvertCore.pixels(raw, rowBytes, y0, r0, r1, w, sampler, mapper, contrast, scratches[worker], buf)
+            ConvertCore.pixels(raw, rowBytes, y0, r0, r1, w, sampler, mapper, tone, scratches[worker], buf)
         }
         val ms = (System.nanoTime() - t0) / 1_000_000
         log("klaar in $ms ms")

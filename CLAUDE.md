@@ -92,15 +92,25 @@ maakt de bewaard-lijst (`camera_version`) helemaal leeg en zet de Lightroom-expo
 al omgezette foto's blijven Done, en de knop is weg tijdens een run. Waarom Mark het miste: een foto die hij in de Galerij bewerkt (Hasselblad-omlijsting, `IMG_YYYYMMDD_HHMMSS.jpg`) telt als
 Galerij-bewerking en staat dus meteen aan, ook al heeft hij hem net pas gemaakt.
 
-Lokaal contrast in de lichten (2026-11-17): Mark vond de lichten van een omgezette foto vlak en minder fel dan in HDR, terwijl de schaduwen goed waren. Gemeten: de curve drukt de lichten samen, waardoor ze
-zo'n 38% lokaal contrast verliezen ten opzichte van de camera-SDR (std over 9 pixels in de lichtste 8%: camera 7,1, uitvoer 4,5). Twee ingrepen, beide alleen in de lichten. 1) `LocalContrast` geeft de HDR
-vóór de curve `Y' = Y * (Y/M)^(0,6 * w * g)` terug: M is het gauss-gemiddelde (sigma 0,5% van de lange kant) van het steekproefraster van de eerste pass, bilineair opgezocht per pixel (een strook heeft dus geen
-buren nodig); w alleen bij een lichte omgeving (M 0,5 tot 1,2), g alleen waar de gain map oplicht (opticht 10% tot 30%), dus de witte omlijsting en haar tekst blijven exact (255, tekst 0,2 code verschil).
-Vermenigvuldiger begrensd op 1/1,8 tot 1,8; de piek wordt daarna met dezelfde verhouding uit de steekproef verhoogd, anders valt 5% van de lucht op wit. 2) De knie van de uitvoer ligt een kwart van de ruimte
-tot wit hoger dan die waarop de belichting wordt gematcht (`ToneMapper.liftedKnee`, Normaal 0,45 naar 0,59): wat onder de knie zit blijft lineair, dus schaduwen en mids bewegen niet en de lichten worden helderder;
-het gemiddelde van de foto komt daardoor 3 tot 4% boven de camera uit, alleen in de lichten. Gemeten op de echte keten (emulator, 3 foto's van 17 november): lokaal contrast 4,5 naar 6,7 (camera 7,1) en 6,6 naar
-9,2 (camera 8,8), p95 +6,9 naar +6,9 en +6,4 naar +11,8, clip op wit 2,4 naar 1,4% en 0,3 naar 0,5%. Wat niet kan: de lichten zo fel als in HDR, want SDR houdt op bij 255 (de lichtste 8% staat al op 250 van 255).
-Referentie en cijfers voor de tests: `lc_*` en `lifted_knee` in `prototype/tonemap.py`; `ToneMapperTest` en `LocalContrastTest`.
+Lokale tone map in de lichten (2026-11-21, vervangt het lokale contrast van 2026-11-17): Mark vond na het omzetten de lichten "blown out" (lucht en zon vlak wit), terwijl de camera-SDR daar tekening houdt.
+Gemeten op 45 foto's van 21 november (telefoon-uitvoer naast de camera-SDR): de uitvoer had 1,2% pixels op wit (camera 0,4%), op de lichtste foto's 8,4% (camera 4,1%), en in de lichtste 5% minder spreiding dan de camera
+(std 8,5 tegen 9,0; op de lucht 0,9 tegen 1,7). Oorzaak: de curve heeft bij de piek een helling van ±0,07 (14 keer samenpersen) en brengt de piek precies op wit, dus brede lichte vlakken worden in een paar codes geperst en lopen
+dicht; het lokale contrast van 17 november (`Y * (Y/M)^0,6`) corrigeerde dat maar half. De app van de telefoon (18:54) had dat al; de latere commits gaven bij 100% byte voor byte dezelfde uitvoer (emulator: de vorige build
+geeft 0,0 code verschil met wat de telefoon maakte), dus pas deze wijziging verandert het resultaat. Nieuw: elke pixel krijgt een eigen gain, `Y_uit = c(M) * clamp(Y/M, 1/1,8, 1,8)`, met `M` het randbewuste gemiddelde van de
+omgeving (`LocalTone`: zelfsturend filter van He et al. op ln Y, eps 0,1, straal 2 sigma, sigma 1% van de lange kant, op het steekproefraster van de eerste pass, per pixel bilineair opgezocht, dus een strook heeft geen buren
+nodig) en `c` dezelfde schouder als vroeger, maar met de piek van de omgeving (99,95e percentiel van M) op `top` = 0,90 in plaats van op wit (`ToneMapper.lt`: 1 - 0,10 * smooth(1, 2, piek), dus bij piek 1 wit en is sterkte 0
+nog steeds de identiteit): zo is er boven de lichten ruimte voor het detail. Een gauss voor M gaf een halo rond een silhouet tegen de zon; het zelfsturende filter niet. Het gewicht `wl = smooth(0,5, 1,2, M) * smooth(1,10, 1,30, Y/Y_sdr)`
+laat de globale curve (met dezelfde top) gelden waar de gain map niet oplicht (witte omlijsting en tekst: verschil met de camera-SDR 0,38 code, zonder dit gewicht 0,65) of de omgeving donker is; de per-kanaalcurve (mix 0,5) volgt
+dezelfde indeling; een zachte klem (tanh) boven 0,85 laat het detail niet hard afknippen; het anker voor pixels zonder gain blijft. De belichting wordt op wat er uitkomt gematcht (`ToneMapper.matching(..., means)`),
+de knie van de uitvoer blijft `liftedKnee` (Normaal 0,45 naar 0,59). `ToneMapper.mapLocal` is de pixelkant; zonder geldig raster valt `ConvertCore.prepare` terug op de globale curve (`map`, onveranderd).
+Gemeten op de 45 foto's (Python-referentie op 1/8 met de echte lange kant per foto, raster 4; gemiddelden): pixels op wit 1,2% naar 0,5% (camera 0,4%), op wit waar de gain map oplicht 5,9% naar 3,0%, spreiding in de lichtste 5% 8,5 naar 9,9
+(camera 9,0), lokaal contrast in de lichtste 8% 7,97 naar 8,14 (camera 8,08), gemiddelde helderheid 1,023 naar 1,024 van de camera, lichtste 5% gemiddeld 232 naar 229 (camera 223; de zon zelf komt op 0,90 en het detail
+erboven). Geen foto met minder dan 70% van het lokale contrast van de camera en geen met meer pixels op wit dan de telefoon-uitvoer. Met de `Converter` via de debug-ontvanger (`--es in`, emulator, 4 foto's; niet via `ConvertJob`; 50 MP in 6,9 s tegen 6,1 s voor het lokale contrast): lucht 154910 op wit 8,4% naar 0,8% (camera 4,1%),
+spreiding 0,9 naar 2,5 (camera 1,7), lokaal contrast 2,7 naar 3,8 (camera 4,0); zon-silhouet 162618 op wit 5,3% naar 0,2%; de uitvoer wijkt 0,5 tot 1,8 code gemiddeld af van de Python-referentie. Sterkte 0 is nog de camera-SDR (0,37 code gemiddeld verschil, max 5: JPEG), sterkte 50 geeft al de volle top 0,90 (piek 1,99 dus ruimte voor het detail) en ligt qua lichten dicht bij 100%.
+Halo: op 1:1 gecontroleerd bij de kin tegen de zon, de lichtvlek in het donkere hoofd en een boom tegen de lucht: geen rand; in de lucht van 154910 zit een zwakke golvende structuur (niet beoordeeld of die van de camera komt).
+Wat niet kan: de lichten zo fel als in HDR, want SDR houdt op bij 255; de zon zelf staat nu op ±245 in plaats van wit (`LocalTone.HEADROOM` 0,10 is de knop: lager is feller maar meer clip; 0 is vroeger), en de HDR-weergave zelf (Ultra HDR behouden) verandert hier niet. Terugdraaien kan door `ConvertCore.prepare` altijd `null` voor
+`tone` te laten geven (dan geldt weer de globale curve).
+Referentie en cijfers voor de tests: `lt_*` en `lifted_knee` in `prototype/tonemap.py` (`lc_*` bestaat daar nog als historie); `ToneMapperTest` en `LocalToneTest`.
 
 Alleen deze foto omzetten (2026-11-17): in de viewer staat rechtsboven een drie-puntjesmenu (`KeeperIcons.More`), altijd zichtbaar, ook bij een foto die al Klaar is. Het item heet "Alleen deze foto omzetten", bij Klaar
 "Nieuwe versie maken", en is uit voor wat geen HDR-JPG of RAW is of als er al een run loopt. Het start via dezelfde service en melding als Omzetten met `ConvertOptions(only = {id}, newVersion = true)`: de foto telt voor deze run als
@@ -111,7 +121,7 @@ als de eerste; het verslag noemt de naam (`ConvertReport.written`). Voor vergeli
 HDR-sterkte (2026-11-18): één getal van 0 tot 100% (`ConvertSettings.strength`, 0 tot 1): hoeveel van de gain map meetelt. Alle gains (log2) worden met dat getal vermenigvuldigd in `GainMapSampler`
 (LUT: `2^(s * gain)`; bij ongelijke offsets telt `lift` mee, zodat 0 altijd de camera-SDR is). 100 is zoals het altijd was, 0 is de SDR van de camera. Het gaat naar beide samplers (`measure` en `convert`), anders zou de piek op de volle HDR
 gekozen worden terwijl de pixels minder HDR hebben. `ToneMapper.matching(..., strength)` laat de maximale belichting meelopen: `cap = 1 - s * (1 - preset.exposure)` (Normaal 0,90 bij 100%, 1,00 bij 0%), anders zou 0% toch 10% donkerder
-uitkomen dan de camera. Lokaal contrast verdwijnt bij lage sterkte vanzelf (geen opticht, dus gewicht 0). Standaard: `KeeperPrefs.hdrStrength` (Int, 100). Per foto: `hdrStrengthByName` (stringset `naam|procent`, de
+uitkomen dan de camera. De lokale tone map verdwijnt bij lage sterkte vanzelf (geen opticht, dus gewicht 0; piek 1 geeft top 1). Standaard: `KeeperPrefs.hdrStrength` (Int, 100). Per foto: `hdrStrengthByName` (stringset `naam|procent`, de
 bestandsnaam van het origineel, zoals `skipped`; `StrengthEntries`). `ConvertJob` pakt per foto `strengthByName[naam] ?: standaard`. Een bestaande uitvoer verandert niet door een andere sterkte: daarvoor is "Nieuwe versie maken".
 
 Instelling en schuif (2026-11-18): Instellingen > Omzetten heeft een schuif "HDR-sterkte" (stappen van 5%, opslaan bij loslaten; `HdrStrengthSlider`). In de viewer staat in het drie-puntjesmenu "HDR-sterkte" (alleen bij een HDR-JPG): dat opent

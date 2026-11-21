@@ -17,7 +17,7 @@ import kotlin.coroutines.cancellation.CancellationException
 /**
  * Het voorbeeld van een omzetting in de viewer: dezelfde stappen als [Converter] (via [ConvertCore]), maar op een verkleind beeld en in het
  * geheugen, zodat het bij het schuiven van de HDR-sterkte live meebeweegt. Het beeld en de gain map worden één keer gedecodeerd ([open]);
- * elke [render] rekent daarna alleen nog de gain, de tone map en het lokale contrast opnieuw.
+ * elke [render] rekent daarna alleen nog de gain en de (lokale) tone map opnieuw.
  */
 class ConvertPreview private constructor(
     private val layout: UltraHdrLayout, private val gain: GainMapImage, private val raw: ByteArray, private val rowBytes: Int,
@@ -37,7 +37,7 @@ class ConvertPreview private constructor(
                 val r0 = i * chunk
                 val r1 = minOf(r0 + chunk, height)
                 if (r0 >= r1) null else async {
-                    ConvertCore.pixels(raw, rowBytes, 0, r0, r1, width, sampler, prepared.mapper, prepared.contrast, ConvertCore.Scratch(width, sampler.newScratch()), rgb)
+                    ConvertCore.pixels(raw, rowBytes, 0, r0, r1, width, sampler, prepared.mapper, prepared.tone, ConvertCore.Scratch(width, sampler.newScratch()), rgb)
                 }
             }.awaitAll()
         }

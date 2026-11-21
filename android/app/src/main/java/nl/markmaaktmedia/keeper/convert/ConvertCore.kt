@@ -12,9 +12,9 @@ import kotlin.coroutines.cancellation.CancellationException
  */
 internal object ConvertCore {
     /** Het steekproefraster: elke vierde pixel van elke vierde rij. */
-    const val SAMPLE_STEP = LocalContrast.GRID_STEP
+    const val SAMPLE_STEP = LocalTone.GRID_STEP
 
-    class Scratch(width: Int, val gain: FloatArray) { val sdr = FloatArray(width * 3); val hdr = FloatArray(width * 3) }
+    class Scratch(width: Int, val gain: FloatArray) { val sdr = FloatArray(width * 3); val hdr = FloatArray(width * 3); val mean = FloatArray(width) }
 
     /**
      * Wat de eerste pass over het (verkleinde) beeld oplevert: de piek, de kleurruimte, en een steekproef van de lineaire HDR-pixels met de
@@ -25,31 +25,26 @@ internal object ConvertCore {
         val gridW: Int, val gridH: Int,
     )
 
-    /** Wat de tweede pass nodig heeft: de tone map met de gekozen belichting, het lokale contrast, en de luminantiecoëfficiënten. */
-    class Prepared(val mapper: ToneMapper, val contrast: LocalContrast?, val peak: Float, val luma: FloatArray)
+    /** Wat de tweede pass nodig heeft: de tone map met de gekozen belichting, de omgeving voor de lokale tone map (null: globale curve), en de luminantiecoëfficiënten. */
+    class Prepared(val mapper: ToneMapper, val tone: LocalTone?, val peak: Float, val luma: FloatArray)
 
     fun lumaFor(space: String): FloatArray = if (space.contains("P3", ignoreCase = true)) ToneMapper.LUMA_P3 else ToneMapper.LUMA_SRGB
 
     /**
      * Van de eerste pass naar de tone map. [sample] is de verkleiningsfactor van het beeld waarvan de steekproef komt, [w] en [h] zijn de maten van
-     * het beeld dat uiteindelijk wordt gemaakt. Lokaal contrast in de lichten komt er eerst bij (zie [LocalContrast]); de belichting wordt gekozen
-     * op wat er daarna uitkomt, en op de HDR-sterkte (zie [ToneMapper.matching]).
+     * het beeld dat uiteindelijk wordt gemaakt. De lichten krijgen een lokale tone map (zie [LocalTone] en [ToneMapper.mapLocal]), met de piek van de
+     * omgeving; de belichting wordt gekozen op wat er daarna uitkomt, en op de HDR-sterkte (zie [ToneMapper.matching]). Klopt het raster niet, dan
+     * geldt de globale curve met de piek van het hele beeld.
      */
     fun prepare(first: Measured, settings: ConvertSettings, sample: Int, w: Int, h: Int): Prepared {
-        var peak = first.peak
         val luma = lumaFor(first.space)
-        val contrast = LocalContrast.build(first.samples, first.sampleCount, first.gridW, first.gridH, sample, w, h, luma)
-        if (contrast != null) {
-            // Het lokale contrast tilt de lichten op, dus de piek van wat er door de curve gaat ligt hoger dan die van de HDR zelf.
-            // De verhouding komt uit de steekproef (zelfde percentiel voor en na), de piek zelf blijft die van de hele foto.
-            val before = LuminanceHistogram.peakOf(first.samples, first.sampleCount, luma)
-            contrast.adjustSamples(first.samples, first.sdrSamples, first.sampleCount)
-            val after = LuminanceHistogram.peakOf(first.samples, first.sampleCount, luma)
-            if (before > 0f && after > before) peak = (peak * after / before).coerceIn(1.0f, 4.93f)
-        }
+        val tone = LocalTone.build(first.samples, first.sampleCount, first.gridW, first.gridH, sample, w, h, luma)
+        val peak = tone?.peak ?: first.peak
         // De belichting volgt de camera: de foto komt even helder uit als de SDR-versie die de camera zelf maakte (zie ToneMapper.matching).
-        val mapper = ToneMapper.matching(settings.toneMap, peak, luma, first.samples, first.sampleCount, first.baseMean, first.sdrSamples, settings.strength)
-        return Prepared(mapper, contrast, peak, luma)
+        val mapper = ToneMapper.matching(
+            settings.toneMap, peak, luma, first.samples, first.sampleCount, first.baseMean, first.sdrSamples, settings.strength, tone?.mean,
+        )
+        return Prepared(mapper, tone, peak, luma)
     }
 
     /** Piek uit het 99,95e percentiel van de luminantie van de gereconstrueerde HDR, op een verkleind beeld ([raw] is ARGB_8888, [rowBytes] per rij). */
@@ -94,10 +89,10 @@ internal object ConvertCore {
         )
     }
 
-    /** Rijen [r0, r1) van een strook: SDR uit de bytes, HDR via de gain map, lokaal contrast, tone map (met de SDR als anker), naar 8-bit sRGB in [out]. */
+    /** Rijen [r0, r1) van een strook: SDR uit de bytes, HDR via de gain map, tone map (lokaal als er een [tone] is, met de SDR als anker), naar 8-bit sRGB in [out]. */
     fun pixels(
         raw: ByteArray, rowBytes: Int, stripY: Int, r0: Int, r1: Int, w: Int,
-        sampler: GainMapSampler, mapper: ToneMapper, contrast: LocalContrast?, s: Scratch, out: ByteArray,
+        sampler: GainMapSampler, mapper: ToneMapper, tone: LocalTone?, s: Scratch, out: ByteArray,
     ) {
         val px = s.hdr
         val base = s.sdr
@@ -110,10 +105,11 @@ internal object ConvertCore {
                 p += 4
             }
             sampler.hdrRow(stripY + r, base, px, s.gain)
-            contrast?.adjustRow(stripY + r, px, base)
+            tone?.rowMeans(stripY + r, s.mean)
             var o = r * w * 3
             for (x in 0 until w) {
-                mapper.map(px[x * 3], px[x * 3 + 1], px[x * 3 + 2], base[x * 3], base[x * 3 + 1], base[x * 3 + 2], px, x * 3)
+                if (tone != null) mapper.mapLocal(px[x * 3], px[x * 3 + 1], px[x * 3 + 2], base[x * 3], base[x * 3 + 1], base[x * 3 + 2], s.mean[x], px, x * 3)
+                else mapper.map(px[x * 3], px[x * 3 + 1], px[x * 3 + 2], base[x * 3], base[x * 3 + 1], base[x * 3 + 2], px, x * 3)
                 out[o] = Srgb.toByte(px[x * 3]).toByte()
                 out[o + 1] = Srgb.toByte(px[x * 3 + 1]).toByte()
                 out[o + 2] = Srgb.toByte(px[x * 3 + 2]).toByte()

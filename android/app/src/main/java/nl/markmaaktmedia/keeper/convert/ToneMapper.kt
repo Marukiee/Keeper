@@ -4,6 +4,7 @@ import kotlin.math.exp
 import kotlin.math.ln
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.tanh
 
 /**
  * Globale tone map van lineaire HDR naar SDR, per pixel (dus geschikt voor rijstroken). Een port van `prototype/tonemap.py`;
@@ -35,6 +36,30 @@ class ToneMapper(
         val i = f.toInt()
         val a = lut[i]
         return a + (lut[i + 1] - a) * (f - i)
+    }
+
+    // De schouder van de lokale tone map ([mapLocal]): dezelfde curve, maar de piek komt uit op [lt] (< 1: ruimte boven de lichten voor het detail) en
+    // daarboven loopt hij door tot wit. Een tabel tot twee keer de piek; daarboven geldt de laatste waarde.
+    private val lt = lt(peak)
+    private val ltRange = 2f * top
+    private val ltScale = LUT_SIZE / ltRange
+    private val ltLut = FloatArray(LUT_SIZE + 2) { shoulder(it / ltScale) }
+
+    private fun shoulder(v: Float): Float {
+        val vs = v * exposure
+        if (vs <= knee) return min(vs, 1f)
+        val x = (vs - knee) * invKnee
+        val g = x * (1f + x / w2) / (1f + x)
+        return min(knee + (lt - knee) * g, 1f)
+    }
+
+    private fun at(v: Float): Float {
+        if (v <= 0f) return 0f
+        if (v >= ltRange) return ltLut[LUT_SIZE]
+        val f = v * ltScale
+        val i = f.toInt()
+        val a = ltLut[i]
+        return a + (ltLut[i + 1] - a) * (f - i)
     }
 
     /** Lineair tot de knie, daarboven een zachte rolloff die de piek precies op wit brengt. */
@@ -89,8 +114,60 @@ class ToneMapper(
         }
     }
 
+    /**
+     * De lokale tone map: zoals [map] met de SDR van de camera, maar met een eigen gain per pixel uit het omgevingsgemiddelde [m] (zie [LocalTone]).
+     * In de lichten waar de gain map oplicht is de luminantie `c(m) * (y / m)` (begrensd op [LocalTone.DCAP]); waar de gain map niet oplicht (omlijsting,
+     * tekst) of de omgeving donker is, geldt de globale curve (met dezelfde top), met het gewicht `wl = smooth(M0, M1, m) * smooth(R0, R1, y / ys)`.
+     * De per-kanaalcurve (mix 0,5) volgt dezelfde indeling. Een zachte klem (tanh) boven [LocalTone.SOFT] laat het detail niet hard afknippen.
+     */
+    fun mapLocal(r: Float, g: Float, b: Float, sr: Float, sg: Float, sb: Float, m0: Float, out: FloatArray, o: Int) {
+        val y = luma[0] * r + luma[1] * g + luma[2] * b
+        val ys = luma[0] * sr + luma[1] * sg + luma[2] * sb
+        val m = max(m0, 1e-4f)
+        val wl = smooth(LocalTone.R0, LocalTone.R1, y / max(ys, 1e-4f)) * (if (y > 0f) smooth(LocalTone.M0, LocalTone.M1, m) else 0f)
+        val cm = if (wl > 0f) at(m) else 0f
+        val yo = if (wl > 0f) (1f - wl) * at(y) + wl * soft(cm * (y / m).coerceIn(1f / LocalTone.DCAP, LocalTone.DCAP)) else at(y)
+        val scale = if (y > 1e-6f) yo / y else exposure
+        var or = r * scale
+        var og = g * scale
+        var ob = b * scale
+        val mx = max(or, max(og, ob))
+        if (mx > 1f) {
+            val yc = min(yo, 1f)
+            val t = (1f - yc) / max(mx - yc, 1e-6f)
+            or = yc + (or - yc) * t
+            og = yc + (og - yc) * t
+            ob = yc + (ob - yc) * t
+        }
+        or = mix * or + (1f - mix) * channel(r, wl, cm, m)
+        og = mix * og + (1f - mix) * channel(g, wl, cm, m)
+        ob = mix * ob + (1f - mix) * channel(b, wl, cm, m)
+        val a = if (ys <= ANCHOR_Y0) 0f else anchor(y, ys)
+        if (a > 0f) {
+            or += (sr - or) * a
+            og += (sg - og) * a
+            ob += (sb - ob) * a
+        }
+        out[o] = or.coerceIn(0f, 1f)
+        out[o + 1] = og.coerceIn(0f, 1f)
+        out[o + 2] = ob.coerceIn(0f, 1f)
+    }
+
+    private fun channel(v: Float, wl: Float, cm: Float, m: Float): Float {
+        val c = if (wl > 0f) (1f - wl) * at(v) + wl * soft(cm * min(v / m, LocalTone.CHCAP)) else at(v)
+        return min(c, 1f)
+    }
+
+    private fun soft(x: Float): Float {
+        val s = LocalTone.SOFT
+        return if (x > s) s + (1f - s) * tanh((x - s) / (1f - s)) else x
+    }
+
     companion object {
         private const val LUT_SIZE = 4096
+
+        /** De top van de schouder in de lokale tone map: 1 - [LocalTone.HEADROOM] bij een piek van 2 of meer, wit bij piek 1 (sterkte 0 blijft de identiteit). */
+        fun lt(peak: Float) = 1f - LocalTone.HEADROOM * smooth(1f, 2f, peak)
 
         // Anker: volledig bij een opticht van minder dan 5% (0,07 stop) in de luminantie, weg bij 30% (0,38 stop); en pas bij lichte
         // pixels (SDR-luminantie 0,6 tot 0,95, geleidelijk), zodat donkere vlakken zonder gain gewoon de curve volgen.
@@ -99,7 +176,7 @@ class ToneMapper(
         private const val ANCHOR_Y0 = 0.60f
         private const val ANCHOR_Y1 = 0.95f
 
-        private fun smooth(e0: Float, e1: Float, x: Float): Float {
+        internal fun smooth(e0: Float, e1: Float, x: Float): Float {
             val t = ((x - e0) / (e1 - e0)).coerceIn(0f, 1f)
             return t * t * (3f - 2f * t)
         }
@@ -143,6 +220,8 @@ class ToneMapper(
          * [samples] zijn lineaire HDR-pixels (r, g, b achter elkaar, [count] stuks) uit de eerste pass. [sdrSamples] zijn dezelfde pixels
          * in de SDR van de camera; met die erbij telt het anker (zie [map] met SDR) mee in het gemiddelde, zoals het in de uitvoer meetelt.
          *
+         * Met [means] (het omgevingsgemiddelde van elke steekproefpixel, zie [LocalTone]) wordt de lokale tone map ([mapLocal]) gebruikt, ook voor de belichting.
+         *
          * Bij een lagere HDR-[strength] (0 tot 1) telt minder van de gain map mee en is de HDR minder helder dan de camera-SDR; de belichting mag dan
          * verder terug naar 1,0 (de maximale belichting gaat van die van de sterkte bij 1 naar 1,0 bij 0), anders zou een foto zonder HDR toch
          * donkerder uitkomen dan wat de camera zelf maakte. Sterkte 0 met piek 1,0 en belichting 1,0 is de identiteit.
@@ -150,6 +229,7 @@ class ToneMapper(
         fun matching(
             t: nl.markmaaktmedia.keeper.scan.ToneMap, peak: Float, luma: FloatArray,
             samples: FloatArray, count: Int, targetMean: Double, sdrSamples: FloatArray? = null, strength: Float = 1f,
+            means: FloatArray? = null,
         ): ToneMapper {
             val cap = 1f - strength.coerceIn(0f, 1f) * (1f - t.exposure.toFloat())
             if (count == 0 || cap <= MIN_EXPOSURE) return ToneMapper(peak, cap, liftedKnee(t.knee.toFloat()), 0.5f, luma)
@@ -158,7 +238,8 @@ class ToneMapper(
                 val m = ToneMapper(peak, exposure, t.knee.toFloat(), 0.5f, luma)
                 var sum = 0.0
                 for (i in 0 until count) {
-                    if (sdrSamples != null) m.map(samples[i * 3], samples[i * 3 + 1], samples[i * 3 + 2], sdrSamples[i * 3], sdrSamples[i * 3 + 1], sdrSamples[i * 3 + 2], out, 0)
+                    if (sdrSamples != null && means != null) m.mapLocal(samples[i * 3], samples[i * 3 + 1], samples[i * 3 + 2], sdrSamples[i * 3], sdrSamples[i * 3 + 1], sdrSamples[i * 3 + 2], means[i], out, 0)
+                    else if (sdrSamples != null) m.map(samples[i * 3], samples[i * 3 + 1], samples[i * 3 + 2], sdrSamples[i * 3], sdrSamples[i * 3 + 1], sdrSamples[i * 3 + 2], out, 0)
                     else m.map(samples[i * 3], samples[i * 3 + 1], samples[i * 3 + 2], out, 0)
                     sum += luma[0] * out[0] + luma[1] * out[1] + luma[2] * out[2]
                 }
@@ -218,6 +299,14 @@ class LuminanceHistogram {
 
     companion object {
         private const val BINS = 2000
+
+        /** Het 99,95e percentiel van [count] luminanties, zonder de grenzen van [peak]; 0 als er niets is. */
+        fun peakOfValues(values: FloatArray, count: Int): Float {
+            if (count == 0) return 0f
+            val h = LuminanceHistogram()
+            for (i in 0 until count) h.add(values[i])
+            return h.peak(lo = 1e-3f, hi = 8f)
+        }
 
         /** Het 99,95e percentiel van de luminantie van een steekproef (r, g, b achter elkaar), zonder de grenzen van [peak]; 0 als er niets is. */
         fun peakOf(samples: FloatArray, count: Int, luma: FloatArray): Float {
