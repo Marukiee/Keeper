@@ -179,6 +179,17 @@ class UpdateRepository(
         scope.launch { retry() }
     }
 
+    /** The person is back from the "install unknown apps" screen: carries on in the app's own scope, so a screen change cannot cancel the download. */
+    fun resume() {
+        scope.launch { resumeAfterPermission() }
+    }
+
+    /** The installer reported success. For a self-update the process is gone by now; if it is not (another package was installed), the card goes. */
+    fun onInstalled() {
+        clearConfirmation()
+        _state.value = UpdateState.Idle
+    }
+
     /** The release the person is in the middle of installing, so a failure can offer to carry on. */
     @Volatile private var current: ReleaseInfo? = null
 

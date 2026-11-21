@@ -18,7 +18,7 @@ class InstallResultReceiver : BroadcastReceiver() {
                 // whether that is so, and otherwise keeps the question for when the person comes back.
                 if (confirm != null) context.graph.updater.onConfirmationNeeded(confirm)
             }
-            PackageInstaller.STATUS_SUCCESS -> context.graph.updater.clearConfirmation()
+            PackageInstaller.STATUS_SUCCESS -> context.graph.updater.onInstalled()
             PackageInstaller.STATUS_FAILURE_ABORTED ->
                 context.graph.updater.reportInstallFailure(context.getString(R.string.update_reason_cancelled))
             else -> {

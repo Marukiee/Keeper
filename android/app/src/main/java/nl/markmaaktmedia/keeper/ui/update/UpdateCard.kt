@@ -107,8 +107,8 @@ fun UpdateCard(modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
 
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
-        // Back from the "install unknown apps" screen with the switch on: carry on where it stopped.
-        scope.launch { updater.resumeAfterPermission() }
+        // Back from the "install unknown apps" screen with the switch on: carry on where it stopped (in the app's scope, not this screen's).
+        updater.resume()
         // An update that finished downloading while the app was out of sight asks its question now.
         updater.resumeConfirmation()
     }
@@ -270,6 +270,8 @@ private fun Actions(phase: Phase, progress: Float, restLabel: String, barEnabled
         if (phase == Phase.Rest) 1f else 0f,
         spring(dampingRatio = 0.9f, stiffness = Spring.StiffnessMediumLow), label = "laterShare",
     )
+    // Doorzichtigheid is een tween, geen veer: een veer laat het knopje flikkeren.
+    val laterAlpha by animateFloatAsState(if (phase == Phase.Rest) 1f else 0f, tween(260), label = "laterAlpha")
     val barFill by animateColorAsState(
         when (phase) { Phase.Rest -> colors.primary; Phase.Busy -> colors.surfaceContainerHighest; Phase.Installing -> colors.primaryContainer },
         KeeperMotion.colourSpec(), label = "barFill",
@@ -282,7 +284,7 @@ private fun Actions(phase: Phase, progress: Float, restLabel: String, barEnabled
         if (laterShare > 0.005f) {
             val share = laterShare.coerceIn(0f, 1f)
             Box(
-                Modifier.weight(share.coerceAtLeast(0.001f)).fillMaxHeight().graphicsLayer { alpha = share }
+                Modifier.weight(share.coerceAtLeast(0.001f)).fillMaxHeight().graphicsLayer { alpha = laterAlpha }
                     .clip(PillShape).background(colors.surfaceContainerHighest).bouncyClickable(enabled = phase == Phase.Rest, onClick = onLater),
                 contentAlignment = Alignment.Center,
             ) {
