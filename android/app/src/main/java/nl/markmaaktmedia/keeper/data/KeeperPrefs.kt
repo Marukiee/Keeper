@@ -150,9 +150,10 @@ class KeeperPrefs(private val context: Context) {
 
     /**
      * HDR behouden: de uitvoer blijft een Ultra HDR-bestand (hoofdbeeld opnieuw gecodeerd, gain map mee, met de HDR-sterkte erin) in plaats van een
-     * SDR-bestand met tone map. Standaard uit.
+     * SDR-bestand met tone map. Standaard aan (Mark, 2026-11-21: "hdr toch mooier bij alles", en dan alleen comprimeren); wie de instelling ooit zelf
+     * heeft gezet, houdt zijn keuze.
      */
-    val keepHdr: Flow<Boolean> = data.map { it[K.keepHdr] ?: false }.distinctUntilChanged()
+    val keepHdr: Flow<Boolean> = data.map { it[K.keepHdr] ?: true }.distinctUntilChanged()
     suspend fun setKeepHdr(on: Boolean) = edit { it[K.keepHdr] = on }
 
     /** HDR of SDR per foto (bestandsnaam naar waar of onwaar), voor wat afwijkt van [keepHdr]. Staat een foto er niet in, dan geldt de instelling. */

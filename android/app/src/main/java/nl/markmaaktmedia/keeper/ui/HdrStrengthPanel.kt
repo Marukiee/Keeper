@@ -13,6 +13,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import nl.markmaaktmedia.keeper.R
@@ -41,6 +43,7 @@ internal fun HdrStrengthPanel(
     onReset: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val haptics = LocalHapticFeedback.current
     Column(
         modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh).padding(horizontal = 14.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
@@ -48,7 +51,7 @@ internal fun HdrStrengthPanel(
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             val hdrLabel = stringResource(R.string.hdr_strength_hdr)
             val sdrLabel = stringResource(R.string.hdr_strength_sdr)
-            SegmentedPillRow(listOf(true, false), keepHdr, { if (it) hdrLabel else sdrLabel }, onKeepChange, Modifier.weight(1f), equalWidth = true)
+            SegmentedPillRow(listOf(true, false), keepHdr, { if (it) hdrLabel else sdrLabel }, { haptics.performHapticFeedback(HapticFeedbackType.SegmentTick); onKeepChange(it) }, Modifier.weight(1f), equalWidth = true)
             // Terug naar de standaard (Instellingen). Staat er altijd, zodat het paneel niet verspringt; zonder eigen keuze is hij onzichtbaar en uit.
             KeeperIconButton(
                 KeeperIcons.Refresh, stringResource(R.string.hdr_strength_default, defaultPercent), onReset,

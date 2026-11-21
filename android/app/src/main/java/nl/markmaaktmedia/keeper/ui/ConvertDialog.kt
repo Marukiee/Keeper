@@ -1,6 +1,9 @@
 package nl.markmaaktmedia.keeper.ui
 
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -42,7 +45,9 @@ fun ConvertDialog(state: ConvertState, outputFolder: String, onPause: () -> Unit
         is ConvertState.Running -> {
             var hidden by remember { mutableStateOf(false) }
             if (hidden) return
-            val overall = if (state.total > 0) ((state.index - 1) + state.fraction) / state.total else 0f
+            val target = if (state.total > 0) ((state.index - 1) + state.fraction) / state.total else 0f
+            // De voortgang komt in stappen binnen (bij één foto elke 4% en soms met een pauze ertussen): de balk loopt er zacht naartoe in plaats van te springen.
+            val overall by animateFloatAsState(target, tween(durationMillis = 400, easing = LinearOutSlowInEasing), label = "convertProgress")
             KeeperDialog(
                 title = stringResource(R.string.convert_title_running),
                 onDismiss = { hidden = true },

@@ -126,7 +126,7 @@ internal fun ConvertPage(onBack: () -> Unit, contentPadding: PaddingValues) {
     val quality by prefs.quality.collectAsState(initial = 94)
     val toneMapId by prefs.toneMap.collectAsState(initial = "normaal")
     val toneMap = ToneMap.of(toneMapId)
-    val keepHdr by prefs.keepHdr.collectAsState(initial = false)
+    val keepHdr by prefs.keepHdr.collectAsState(initial = true)
     val hideOriginals by prefs.hideOriginals.collectAsState(initial = false)
     val context = LocalContext.current
     val hider = context.graph.hider

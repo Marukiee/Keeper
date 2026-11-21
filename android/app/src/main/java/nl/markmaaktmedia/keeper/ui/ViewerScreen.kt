@@ -176,7 +176,7 @@ fun ViewerScreen(
     val strengthByName by strengthPrefs.hdrStrengthByName.collectAsState(initial = emptyMap())
     // HDR of SDR: de instelling "HDR behouden", of wat voor deze foto gekozen is. Bij HDR toont het voorbeeld de HDR zelf met de gain map op de gekozen
     // sterkte; bij SDR wat de SDR-omzetting zou maken.
-    val keepHdr by strengthPrefs.keepHdr.collectAsState(initial = false)
+    val keepHdr by strengthPrefs.keepHdr.collectAsState(initial = true)
     val keepByName by strengthPrefs.keepHdrByName.collectAsState(initial = emptyMap())
     // Het paneel met HDR of SDR en de sterkte staat standaard onder elke HDR-foto, ook tijdens het doorvegen (aan of uit via het menu).
     val optionsOn by strengthPrefs.viewerOptions.collectAsState(initial = true)
