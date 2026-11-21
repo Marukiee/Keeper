@@ -240,6 +240,9 @@
     <string name="hdr_strength_sdr">SDR</string>
     <string name="hdr_strength_hdr">HDR</string>
     <string name="viewer_hdr_strength">HDR strength</string>
+    <string name="viewer_hdr_options">HDR or SDR and strength</string>
+    <string name="hdr_kind_hdr_hint">Keep HDR: an HDR photo (Ultra HDR) with -HDR in the name. The strength is stored in it and sets how much HDR shows on an HDR screen.</string>
+    <string name="hdr_kind_sdr_hint">SDR: a normal photo with -SDR in the name, made with the tone map. The strength sets how much of the HDR counts.</string>
     <string name="hdr_strength_default">Default (%1$d%%)</string>
     <string name="hdr_strength_done">Done</string>
     <string name="hdr_strength_convert">Convert with this</string>

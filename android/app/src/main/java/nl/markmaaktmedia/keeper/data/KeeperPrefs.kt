@@ -41,6 +41,7 @@ class KeeperPrefs(private val context: Context) {
         val hdrStrength = intPreferencesKey("hdr_strength")
         val hdrStrengthByName = stringSetPreferencesKey("hdr_strength_by_name")
         val keepHdr = booleanPreferencesKey("keep_hdr")
+        val keepHdrByName = stringSetPreferencesKey("keep_hdr_by_name")
         val hideOriginals = booleanPreferencesKey("hide_originals")
         val pendingHide = stringSetPreferencesKey("pending_hide")
         val lookDefault = stringPreferencesKey("look_default")
@@ -153,6 +154,15 @@ class KeeperPrefs(private val context: Context) {
     val keepHdr: Flow<Boolean> = data.map { it[K.keepHdr] ?: false }.distinctUntilChanged()
     suspend fun setKeepHdr(on: Boolean) = edit { it[K.keepHdr] = on }
 
+    /** HDR of SDR per foto (bestandsnaam naar waar of onwaar), voor wat afwijkt van [keepHdr]. Staat een foto er niet in, dan geldt de instelling. */
+    val keepHdrByName: Flow<Map<String, Boolean>> = data.map { KeepEntries.decode(it[K.keepHdrByName]) }.distinctUntilChanged()
+    /** [keep] null haalt de keuze weg (terug naar de instelling). */
+    suspend fun setKeepHdrFor(name: String, keep: Boolean?) = edit {
+        val now = KeepEntries.decode(it[K.keepHdrByName]).toMutableMap()
+        if (keep == null) now.remove(name) else now[name] = keep
+        it[K.keepHdrByName] = KeepEntries.encode(now)
+    }
+
     /**
      * Originelen verbergen: na een gelukte omzetting gaan de camera-JPG's waarvan de uitvoer klopt naar de prullenbak van de Galerij (zie
      * [nl.markmaaktmedia.keeper.convert.OriginalsHider]). Standaard uit; Mark zet het zelf aan.
@@ -209,6 +219,19 @@ object StrengthEntries {
             val at = entry.lastIndexOf('|')
             val percent = entry.substring(at + 1).toIntOrNull()
             if (at > 0 && percent != null) put(entry.substring(0, at), percent.coerceIn(0, 100))
+        }
+    }
+}
+
+/** De keuze HDR of SDR per foto als lijst van `naam|1` (HDR behouden) of `naam|0` (SDR). Een bestandsnaam bevat nooit een `|`. */
+object KeepEntries {
+    fun encode(map: Map<String, Boolean>): Set<String> = map.map { (name, keep) -> "$name|${if (keep) 1 else 0}" }.toSet()
+
+    fun decode(set: Set<String>?): Map<String, Boolean> = buildMap {
+        set?.forEach { entry ->
+            val at = entry.lastIndexOf('|')
+            val value = entry.substring(at + 1)
+            if (at > 0 && (value == "1" || value == "0")) put(entry.substring(0, at), value == "1")
         }
     }
 }

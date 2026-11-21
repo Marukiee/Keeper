@@ -125,7 +125,11 @@ uitkomen dan de camera. De lokale tone map verdwijnt bij lage sterkte vanzelf (g
 bestandsnaam van het origineel, zoals `skipped`; `StrengthEntries`). `ConvertJob` pakt per foto `strengthByName[naam] ?: standaard`. Een bestaande uitvoer verandert niet door een andere sterkte: daarvoor is "Nieuwe versie maken".
 
 Instelling en schuif (2026-11-18): Instellingen > Omzetten heeft een schuif "HDR-sterkte" (stappen van 5%, opslaan bij loslaten; `HdrStrengthSlider`). In de viewer staat in het drie-puntjesmenu "HDR-sterkte" (alleen bij een HDR-JPG): dat opent
-`HdrStrengthPanel` onder de foto, met de schuif, "Standaard (x%)" (haalt de eigen sterkte van deze foto weg) en "Omzetten met deze" (slaat op en start `onConvertOne`, dus een nieuwe versie naast de oude). Terug sluit eerst het paneel.
+`HdrStrengthPanel` onder de foto, met bovenaan de keuze HDR of SDR voor deze foto (zie hieronder), de schuif, "Standaard (x%)" (haalt de eigen sterkte én de eigen HDR/SDR-keuze van deze foto weg) en "Omzetten met deze" (slaat op en start `onConvertOne`, dus een nieuwe versie naast de oude). Terug sluit eerst het paneel.
+HDR of SDR per foto (2026-11-21, `KeeperPrefs.keepHdrByName`, stringset `naam|1` of `naam|0`, `KeepEntries`): de instelling "HDR behouden" is de standaard; een foto die in die map staat wijkt daarvan af. `ConvertJob` bouwt per foto
+`settings.withStrength(..).withKeep(..)` (`settingsOf`): dat bepaalt de naam (`-HDR` of `-SDR`, ook in `ConvertPlan`), wat er geschreven wordt en of het origineel als HDR bewaard telt voor Originelen verbergen; een uitdrukkelijke
+`options.keepHdr` (debug-ontvanger) gaat voor de keuzes per foto. Een tik op HDR of SDR in het paneel wordt meteen bewaard en het voorbeeld erboven wisselt mee (HDR: de gain map op de sterkte, waar het scherm dat kan; SDR: de omzetting).
+Op de emulator gecontroleerd met de echte viewer: instelling uit, foto op HDR gezet, "Omzetten met deze" gaf `IMG20261121162618-HDR.jpg` (Ultra HDR met gain map, 5,9 MB) in `Pictures/Keeper`.
 De foto boven het paneel beweegt live mee: `ZoomablePhoto(strengthPreview)` opent één keer een `ConvertPreview` (de foto op zo'n 1000 tot 2000 px, in het geheugen, plus de gain map) en `render` rekent bij elke stap alleen gain, lokaal contrast en tone map opnieuw
 (dezelfde `ConvertCore` als de echte omzetting: `analyse`, `prepare`, `pixels`, `loadGainMap`), dus het voorbeeld is wat de omzetting straks maakt; een nieuwe stap annuleert de vorige berekening (`produceState`-sleutels, 30 ms wachten).
 

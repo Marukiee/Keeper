@@ -18,17 +18,21 @@ import androidx.compose.ui.unit.dp
 import nl.markmaaktmedia.keeper.R
 import nl.markmaaktmedia.keeper.ui.components.HdrStrengthSlider
 import nl.markmaaktmedia.keeper.ui.components.PrimaryPillButton
+import nl.markmaaktmedia.keeper.ui.components.SegmentedPillRow
 import nl.markmaaktmedia.keeper.ui.components.SecondaryPillButton
 
 /**
- * De HDR-sterkte van één foto, onder de foto in de viewer. De foto erboven beweegt live mee ([ZoomablePhoto] rekent het voorbeeld opnieuw bij elke
+ * De uitvoer van één foto, onder de foto in de viewer: HDR behouden of SDR ([keepHdr], [onKeepChange]; wordt meteen opgeslagen) en de HDR-sterkte. De foto erboven beweegt live mee ([ZoomablePhoto] rekent het voorbeeld opnieuw bij elke
  * stap); de keuze wordt opgeslagen als je loslaat ([onFinished]) en geldt voor de volgende omzetting van deze foto. [hasOverride] is of de
- * foto een eigen sterkte heeft; "Standaard" haalt die weg en gaat terug naar de sterkte uit Instellingen.
+ * foto een eigen keuze of sterkte heeft; "Standaard" haalt die weg en gaat terug naar Instellingen. De foto erboven toont bij HDR de HDR zelf (waar het
+ * scherm dat kan) en bij SDR wat de SDR-omzetting maakt.
  */
 @Composable
 internal fun HdrStrengthPanel(
     percent: Int,
     defaultPercent: Int,
+    keepHdr: Boolean,
+    onKeepChange: (Boolean) -> Unit,
     hasOverride: Boolean,
     converting: Boolean,
     loading: Boolean,
@@ -47,12 +51,19 @@ internal fun HdrStrengthPanel(
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
             Column(Modifier.weight(1f)) {
-                Text(stringResource(R.string.viewer_hdr_strength), style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(R.string.viewer_hdr_options), style = MaterialTheme.typography.titleMedium)
                 if (loading) Text(stringResource(R.string.hdr_strength_loading), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 else if (missing) Text(stringResource(R.string.hdr_strength_unavailable), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             SecondaryPillButton(stringResource(R.string.hdr_strength_done), onDone)
         }
+        val hdrLabel = stringResource(R.string.hdr_strength_hdr)
+        val sdrLabel = stringResource(R.string.hdr_strength_sdr)
+        SegmentedPillRow(listOf(true, false), keepHdr, { if (it) hdrLabel else sdrLabel }, onKeepChange, equalWidth = true)
+        Text(
+            stringResource(if (keepHdr) R.string.hdr_kind_hdr_hint else R.string.hdr_kind_sdr_hint),
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         HdrStrengthSlider(percent, onChange, onFinished = onFinished)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (hasOverride) SecondaryPillButton(stringResource(R.string.hdr_strength_default, defaultPercent), onReset, Modifier.weight(1f))

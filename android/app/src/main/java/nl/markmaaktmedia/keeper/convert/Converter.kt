@@ -35,6 +35,9 @@ class ConvertSettings(
 ) {
     fun withStrength(value: Float) = ConvertSettings(jpegQuality, toneMap, chroma420, value.coerceIn(0f, 1f), keepHdr)
 
+    /** Dezelfde instellingen met HDR behouden aan of uit, voor één foto die afwijkt van de instelling. */
+    fun withKeep(value: Boolean) = ConvertSettings(jpegQuality, toneMap, chroma420, strength, value)
+
     /** Of dit een Ultra HDR-bestand wordt: aan gezet, en met een sterkte die iets overlaat. */
     val keepsHdr: Boolean get() = keepHdr && strength > 0f
 }

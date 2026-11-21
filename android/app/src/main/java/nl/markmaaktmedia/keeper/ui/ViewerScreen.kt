@@ -174,9 +174,10 @@ fun ViewerScreen(
     val strengthPrefs = context.graph.prefs
     val defaultStrength by strengthPrefs.hdrStrength.collectAsState(initial = 100)
     val strengthByName by strengthPrefs.hdrStrengthByName.collectAsState(initial = emptyMap())
-    // Met HDR behouden (instelling) toont het voorbeeld de HDR zelf met de gain map op die sterkte; anders wat de SDR-omzetting zou maken.
+    // HDR of SDR: de instelling "HDR behouden", of wat voor deze foto gekozen is. Bij HDR toont het voorbeeld de HDR zelf met de gain map op de gekozen
+    // sterkte; bij SDR wat de SDR-omzetting zou maken.
     val keepHdr by strengthPrefs.keepHdr.collectAsState(initial = false)
-    val hdrPreview = keepHdr && hdrPreviewSupported
+    val keepByName by strengthPrefs.keepHdrByName.collectAsState(initial = emptyMap())
     var strengthOpen by remember { mutableStateOf(false) }
     var liveStrength by remember { mutableIntStateOf(100) }
     var previewBusy by remember { mutableStateOf(false) }
@@ -209,6 +210,8 @@ fun ViewerScreen(
     var openT by remember { mutableFloatStateOf(0f) }
     LaunchedEffect(pager.currentPage) { zoomed = false; strengthOpen = false }
     val current = list[pager.currentPage.coerceIn(0, list.lastIndex)]
+    val keepNow = keepByName[current.item.name] ?: keepHdr
+    val hdrPreview = keepNow && hdrPreviewSupported
     // Een scherm laat HDR alleen zien als het venster in HDR-modus staat. Dat gaat aan zolang het HDR-voorbeeld zichtbaar is en daarna weer terug,
     // want in HDR-modus kan de rest van het scherm er anders uitzien.
     val hdrShown = strengthOpen && hdrPreview && current.hdr
@@ -332,7 +335,7 @@ fun ViewerScreen(
                         onClick = { menuOpen = false; onConvertOne(asked) },
                     )
                     DropdownMenuItem(
-                        text = { Text(stringResource(R.string.viewer_hdr_strength)) },
+                        text = { Text(stringResource(R.string.viewer_hdr_options)) },
                         // Alleen een HDR-JPG heeft een gain map om te schuiven.
                         enabled = asked.hdr,
                         onClick = { menuOpen = false; liveStrength = strengthByName[asked.item.name] ?: defaultStrength; strengthOpen = true },
@@ -405,13 +408,15 @@ fun ViewerScreen(
         if (strengthOpen) HdrStrengthPanel(
             percent = liveStrength,
             defaultPercent = defaultStrength,
-            hasOverride = strengthByName.containsKey(current.item.name) || liveStrength != defaultStrength,
+            keepHdr = keepNow,
+            onKeepChange = { keep -> val asked = current; scope.launch { strengthPrefs.setKeepHdrFor(asked.item.name, keep) } },
+            hasOverride = strengthByName.containsKey(current.item.name) || liveStrength != defaultStrength || keepByName.containsKey(current.item.name),
             converting = converting,
             loading = previewBusy,
             missing = previewMissing && !previewBusy,
             onChange = { liveStrength = it },
             onFinished = { val asked = current; scope.launch { strengthPrefs.setHdrStrengthFor(asked.item.name, liveStrength) } },
-            onReset = { val asked = current; liveStrength = defaultStrength; scope.launch { strengthPrefs.setHdrStrengthFor(asked.item.name, null) } },
+            onReset = { val asked = current; liveStrength = defaultStrength; scope.launch { strengthPrefs.setHdrStrengthFor(asked.item.name, null); strengthPrefs.setKeepHdrFor(asked.item.name, null) } },
             onDone = { strengthOpen = false },
             // Eerst opslaan: de omzetting leest de sterkte van deze foto bij het begin.
             onConvert = { val asked = current; strengthOpen = false; scope.launch { strengthPrefs.setHdrStrengthFor(asked.item.name, liveStrength); onConvertOne(asked) } },

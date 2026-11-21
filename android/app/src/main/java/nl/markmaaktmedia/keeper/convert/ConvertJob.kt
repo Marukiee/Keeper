@@ -114,11 +114,15 @@ class ConvertJob(private val context: Context, private val prefs: KeeperPrefs, p
         // De HDR-sterkte: de standaard uit Instellingen, of wat Mark voor deze ene foto instelde (per bestandsnaam van het origineel).
         val defaultStrength = prefs.hdrStrength.first()
         val strengthByName = prefs.hdrStrengthByName.first()
-        val strengthOf = { photo: Photo -> (strengthByName[photo.item.name] ?: defaultStrength) / 100f }
-        // Wat omgezet wordt, krijgt `-SDR` of (HDR behouden) `-HDR` in de naam. Dat hangt per foto af van de instelling én de sterkte (sterkte 0 valt terug op SDR),
+        // HDR of SDR: de instelling "HDR behouden", of wat Mark voor deze ene foto koos. Een uitdrukkelijke keuze van de aanroeper (testen) gaat voor.
+        val keepByName = if (options.keepHdr != null) emptyMap() else prefs.keepHdrByName.first()
+        val settingsOf = { photo: Photo ->
+            settings.withStrength((strengthByName[photo.item.name] ?: defaultStrength) / 100f).withKeep(keepByName[photo.item.name] ?: settings.keepHdr)
+        }
+        // Wat omgezet wordt, krijgt `-SDR` of (HDR behouden) `-HDR` in de naam. Dat hangt per foto af van de keuze én de sterkte (sterkte 0 valt terug op SDR),
         // dus de planning vraagt het hier.
         val plan = ConvertPlan.of(photos, snapshot.lightroomFolder, existing, options.newVersion) { photo ->
-            if (settings.withStrength(strengthOf(photo)).keepsHdr) OutputName.Tag.Hdr else OutputName.Tag.Sdr
+            if (settingsOf(photo).keepsHdr) OutputName.Tag.Hdr else OutputName.Tag.Sdr
         }
         // Originelen verbergen (instelling): alleen na een hele run telt wat klaar is, zie OriginalsHiding.eligible. De controle zelf komt later, vlak voor het verbergen.
         val hideOn = prefs.hideOriginals.first()
@@ -146,15 +150,15 @@ class ConvertJob(private val context: Context, private val prefs: KeeperPrefs, p
             val name = step.photo.item.name
             onProgress(ConvertProgress(i + 1, plan.steps.size, name, 0f, step.photo.item, step.how, alreadyDone))
             try {
-                val strength = strengthOf(step.photo)
-                val result = writeOne(step, folder, settings.withStrength(strength), cancelled) { onProgress(ConvertProgress(i + 1, plan.steps.size, name, it, step.photo.item, step.how, alreadyDone)) }
+                val photoSettings = settingsOf(step.photo)
+                val result = writeOne(step, folder, photoSettings, cancelled) { onProgress(ConvertProgress(i + 1, plan.steps.size, name, it, step.photo.item, step.how, alreadyDone)) }
                 if (step.how == How.Copy || result.copiedAsIs) copied++ else converted++
                 bytesIn += result.bytesIn
                 bytesOut += result.bytesOut
                 written += step.outName
                 if (hideOn && OriginalsHiding.eligible(step.photo, step.how, wholeRun)) {
                     val item = step.photo.item
-                    val keptHdr = step.how == How.Convert && !result.copiedAsIs && settings.withStrength(strength).keepsHdr
+                    val keptHdr = step.how == How.Convert && !result.copiedAsIs && photoSettings.keepsHdr
                     prefs.addPendingHide(listOf(HideEntry(item.id, item.name, item.size, result.outputId, result.bytesOut, keptHdr).encode()))
                     hideQueued++
                 }
