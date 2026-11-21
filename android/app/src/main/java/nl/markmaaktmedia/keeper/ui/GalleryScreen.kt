@@ -179,8 +179,8 @@ fun GalleryScreen(
     val labels = GalleryFilter.entries.associateWith { stringResource(it.label) }
     // Alleen wat Mark zelf beoordeelt: camera-JPG's en RAW's, niet de Lightroom-exports.
     val (toReview, notKept) = remember(state.photos) {
-        // Wat al klaar is hoeft niet meer bekeken te worden, ook al is het te kiezen.
-        val reviewable = state.photos.filter { it.selectable && !it.defaultsOn && it.status != Status.Done }
+        // Wat al klaar is hoeft niet meer bekeken te worden, ook al is het te kiezen; heeft Mark het toch bewaard of niet bewaard, dan telt die keuze mee.
+        val reviewable = state.photos.filter { it.selectable && !it.defaultsOn && (it.status != Status.Done || it.kept || it.discarded) }
         reviewable.count { !it.kept && !it.discarded } to reviewable.count { it.discarded }
     }
     var askClear by remember { mutableStateOf(false) }
