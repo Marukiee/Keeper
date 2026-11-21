@@ -103,8 +103,10 @@ class MarkUpdater internal constructor(
             return null
         }
         return if (VersionComparator.isNewer(release.versionName, currentVersion)) {
-            _state.value = UpdateState.Available(release)
-            release
+            // De regels voor de kaart alleen ophalen als ze nodig zijn: er is een nieuwere versie.
+            val withNotes = release.copy(notes = fetchNotes(release))
+            _state.value = UpdateState.Available(withNotes)
+            withNotes
         } else {
             _state.value = UpdateState.UpToDate
             null
@@ -149,6 +151,20 @@ class MarkUpdater internal constructor(
             Log.w(TAG, "Could not read the releases feed", error)
             null
         }
+    }
+
+    /** `changelog.json` zoals het op de tag van [release] stond; leeg als de app het niet heeft of het niet te lezen is. */
+    private suspend fun fetchNotes(release: ReleaseInfo): Map<String, List<String>> = withContext(Dispatchers.IO) {
+        val path = config.changelogPath ?: return@withContext emptyMap()
+        val request = Request.Builder()
+            .url("https://raw.githubusercontent.com/${config.owner}/${config.repo}/${release.tag}/$path")
+            .header("User-Agent", "${config.appName}/${config.currentVersion}")
+            .build()
+        runCatching {
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) emptyMap() else parseChangelogNotes(response.body?.string().orEmpty(), release.versionName)
+            }
+        }.getOrElse { emptyMap() }
     }
 
     /**
@@ -330,17 +346,37 @@ class MarkUpdater internal constructor(
                 }
                 val intent = Intent(context, InstallResultReceiver::class.java).setAction(InstallResultReceiver.ACTION)
                 val pending = PendingIntent.getBroadcast(context, id, intent, PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+                // De app kan nu binnen seconden sluiten: de haak van de app bewaart wat hij daarna nodig heeft.
+                hookStarted = true
+                runHook("onInstallStarting") { onInstallStarting(context, release, appIsInFront()) }
                 session.commit(pending.intentSender)
             }
         }.onFailure { error ->
             Log.w(TAG, "install failed", error)
+            finishHook(success = false)
             _state.value = UpdateState.Failed(error.message ?: context.getString(R.string.markupdate_reason_installer), release)
         }
+    }
+
+    /** Waar na [InstallHook.onInstallStarting] nog geen [InstallHook.onInstallFinished] op volgde. */
+    @Volatile private var hookStarted = false
+
+    private fun finishHook(success: Boolean) {
+        if (!hookStarted) return
+        hookStarted = false
+        runHook("onInstallFinished") { onInstallFinished(context, success) }
+    }
+
+    /** Een fout in de haak van de app breekt de update niet af. */
+    private inline fun runHook(name: String, call: InstallHook.() -> Unit) {
+        val hook = config.installHook ?: return
+        runCatching { hook.call() }.onFailure { Log.w(TAG, "installHook.$name failed", it) }
     }
 
     /** De installer zei nee, of de gebruiker stapte uit zijn scherm. Aangeroepen door [InstallResultReceiver]. */
     internal fun onInstallFailed(reason: String) {
         clearConfirmation()
+        finishHook(success = false)
         _state.value = UpdateState.Failed(reason, current)
     }
 
@@ -350,6 +386,7 @@ class MarkUpdater internal constructor(
      */
     internal fun onInstalled() {
         clearConfirmation()
+        finishHook(success = true)
         _state.value = UpdateState.Idle
     }
 
