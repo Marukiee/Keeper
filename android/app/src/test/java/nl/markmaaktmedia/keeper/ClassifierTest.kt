@@ -148,6 +148,18 @@ class ClassifierTest {
         assertEquals(6_291_456L + 400_000L, s.expectedBytes)
     }
 
+    @Test fun summaryWithHdrKeptAddsTheGainMapAndStaysUnderTheOriginal() {
+        val big = item("IMG1.jpg", w = 8192, h = 6144, size = 18_000_000); val small = item("IMG2.jpg", w = 4000, h = 3000, size = 400_000)
+        val photos = Classifier.classify(listOf(big, small), mapOf(big.id to Probe(true), small.id to Probe(true)), emptySet(), setOf(big.name, small.name), emptySet(), "x/")
+        // HDR behouden: het hoofdbeeld wordt 6,3 MB (1,0 bit per pixel) en de gain map (0,16 van 18 MB = 2,9 MB) blijft; de kleine foto kan niet groter worden.
+        val hdr = Classifier.summarize(photos, 1.0) { true }
+        assertEquals((6_291_456L + 2_880_000L + 400_000L).toDouble(), hdr.expectedBytes.toDouble(), 4.0)
+        // Voor SDR blijft het bij alleen het hoofdbeeld, dus HDR behouden is groter, maar nooit groter dan het origineel.
+        val sdr = Classifier.summarize(photos, 1.0) { false }
+        assertEquals(6_291_456L + 400_000L, sdr.expectedBytes)
+        assertEquals(true, hdr.expectedBytes > sdr.expectedBytes && hdr.expectedBytes <= hdr.currentBytes)
+    }
+
     // De naam in de uitvoermap bepaalt "klaar" (zie OutputName): per soort bron één vaste naam.
     @Test fun keptRawIsDoneWhenItsCameraVersionIsInTheOutputFolder() {
         val raw = item("IMG20261114133431.dng")

@@ -68,7 +68,7 @@ fun ConvertDialog(state: ConvertState, outputFolder: String, onPause: () -> Unit
                                 maxLines = 1, overflow = TextOverflow.Ellipsis,
                             )
                             state.how?.let {
-                                Text(stringResource(howLabel(it)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(stringResource(howLabel(it, state.keepsHdr)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             if (state.alreadyDone > 0) {
                                 Text(stringResource(R.string.convert_before, state.alreadyDone), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -111,9 +111,10 @@ fun ConvertDialog(state: ConvertState, outputFolder: String, onPause: () -> Unit
     }
 }
 
-private fun howLabel(how: How): Int = when (how) {
-    How.Convert -> R.string.convert_how_convert
-    How.CameraVersion -> R.string.convert_how_camera
+/** Wat er met de foto gebeurt, in woorden. [keepsHdr] is of de uitvoer HDR blijft (per foto: de instelling of Marks keuze voor deze foto), anders SDR. */
+private fun howLabel(how: How, keepsHdr: Boolean): Int = when (how) {
+    How.Convert -> if (keepsHdr) R.string.convert_how_convert_hdr else R.string.convert_how_convert
+    How.CameraVersion -> if (keepsHdr) R.string.convert_how_camera_hdr else R.string.convert_how_camera
     How.Copy -> R.string.convert_how_copy
 }
 
@@ -122,7 +123,9 @@ private fun reportText(report: ConvertReport, outputFolder: String): String {
     if (report.problem == ConvertReport.Problem.NoLocationAccess) return stringResource(R.string.convert_need_location)
     val resources = LocalContext.current.resources
     val lines = ArrayList<String>()
-    if (report.converted > 0) lines += stringResource(R.string.convert_result_converted, report.converted)
+    // Wat omgezet is, bleef per foto HDR (alleen kleiner gemaakt) of werd SDR.
+    if (report.keptHdr > 0) lines += stringResource(R.string.convert_result_hdr, report.keptHdr)
+    if (report.converted - report.keptHdr > 0) lines += stringResource(R.string.convert_result_converted, report.converted - report.keptHdr)
     if (report.copied > 0) lines += stringResource(R.string.convert_result_copied, report.copied)
     if (report.skipped > 0) lines += stringResource(R.string.convert_result_skipped, report.skipped)
     // Bij een of twee foto's (alleen deze omzetten): onder welke naam ze staan, want een nieuwe versie heet anders dan de eerste.

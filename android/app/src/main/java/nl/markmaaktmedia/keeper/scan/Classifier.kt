@@ -79,7 +79,19 @@ object Classifier {
     /** Een DNG-preview is ongeveer een vijfde van de DNG (14,5 MB gaf 2,1 MB, 80 MB gaf 18,5 MB). */
     private const val PREVIEW_SHARE = 0.2
 
-    fun summarize(photos: List<Photo>, bitsPerPixel: Double = EXPECTED_BPP): Summary {
+    /**
+     * Het aandeel van een Oppo-JPG dat de gain map is (HDR-laag): gemeten op 45 foto's (2026-11-21, MPF-tabel) mediaan 0,16 van het bestand, tussen 0,05 en 0,22.
+     * Per pixel is het veel minder voorspelbaar (0,2 tot 1,6 bit), dus de schatting gaat uit van het bestand.
+     */
+    const val GAIN_MAP_SHARE = 0.16
+    /** Dezelfde gain map in bits per pixel (gemiddeld 0,8 op die 45 foto's), voor als er geen bestandsgrootte is, zoals in Instellingen. */
+    const val GAIN_MAP_BPP = 0.8
+
+    /**
+     * @param keepsHdr of de uitvoer van deze foto HDR blijft: dan blijft de gain map ongewijzigd mee (alleen het hoofdbeeld wordt kleiner), dus daar komt het
+     *   aandeel [GAIN_MAP_SHARE] van het origineel bij. Zonder dat gaat het om de SDR-omzetting zonder gain map.
+     */
+    fun summarize(photos: List<Photo>, bitsPerPixel: Double = EXPECTED_BPP, keepsHdr: (Photo) -> Boolean = { false }): Summary {
         val going = photos.filter { it.goesAlong }
         var current = 0L
         var expected = 0L
@@ -87,8 +99,10 @@ object Classifier {
             val now = if (p.item.isDng) (p.item.size * PREVIEW_SHARE).toLong() else p.item.size
             current += now
             expected += if (p.needsConversion) {
+                val image = p.item.width.toLong() * p.item.height * bitsPerPixel / 8
                 // Nooit groter dan het origineel: een gladde foto wordt veel kleiner dan deze schatting.
-                minOf(now, (p.item.width.toLong() * p.item.height * bitsPerPixel / 8).toLong())
+                if (keepsHdr(p)) (minOf(now * (1 - GAIN_MAP_SHARE), image) + now * GAIN_MAP_SHARE).toLong()
+                else minOf(now, image.toLong())
             } else now
         }
         return Summary(photos.groupingBy { it.status }.eachCount(), going.size, current, expected)

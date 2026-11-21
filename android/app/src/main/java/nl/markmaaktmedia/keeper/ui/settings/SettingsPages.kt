@@ -29,6 +29,7 @@ import nl.markmaaktmedia.keeper.AppLanguage
 import nl.markmaaktmedia.keeper.R
 import nl.markmaaktmedia.keeper.graph
 import nl.markmaaktmedia.keeper.lightroom.LookPreset
+import nl.markmaaktmedia.keeper.scan.Classifier
 import nl.markmaaktmedia.keeper.scan.JpegQuality
 import nl.markmaaktmedia.keeper.scan.ToneMap
 import nl.markmaaktmedia.keeper.ui.ScreenHeader
@@ -144,8 +145,13 @@ internal fun ConvertPage(onBack: () -> Unit, contentPadding: PaddingValues) {
             ContentRow(1, 4, KeeperIcons.Image, stringResource(R.string.settings_quality)) {
                 SegmentedPillRow(JpegQuality.options, quality, { "q$it" }, { scope.launch { prefs.setQuality(it) } }, equalWidth = true)
                 val bpp = JpegQuality.bitsPerPixel(quality)
+                val bppText = String.format(Locale.getDefault(), "%.2f", bpp)
+                val photo = (50_000_000L * bpp / 8).toLong()
+                // Met HDR behouden zit de gain map (de HDR-laag) er ongewijzigd nog bij: dat is er per foto een flink stuk bij.
+                val gainMap = (50_000_000L * Classifier.GAIN_MAP_BPP / 8).toLong()
                 Text(
-                    stringResource(R.string.settings_quality_estimate, String.format(Locale.getDefault(), "%.2f", bpp), formatBytes((50_000_000L * bpp / 8).toLong())),
+                    if (keepHdr) stringResource(R.string.settings_quality_estimate_hdr, bppText, formatBytes(photo + gainMap), formatBytes(gainMap))
+                    else stringResource(R.string.settings_quality_estimate, bppText, formatBytes(photo)),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }

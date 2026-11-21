@@ -19,7 +19,7 @@ sealed interface ConvertState {
     /** [total] is 0 tot de run weet wat er te doen is. [item] is de foto die nu aan de beurt is; [pausing] als Pauzeren is gevraagd. */
     data class Running(
         val index: Int = 0, val total: Int = 0, val name: String = "", val fraction: Float = 0f,
-        val item: MediaItem? = null, val how: How? = null, val alreadyDone: Int = 0, val pausing: Boolean = false,
+        val item: MediaItem? = null, val how: How? = null, val alreadyDone: Int = 0, val pausing: Boolean = false, val keepsHdr: Boolean = false,
     ) : ConvertState
     data class Finished(val report: ConvertReport) : ConvertState
 }
@@ -56,7 +56,7 @@ class ConvertRepository(private val context: Context, private val prefs: KeeperP
             if (running?.isActive == true) return
             running = scope.launch {
                 val report = try {
-                    job.run({ p -> _state.value = ConvertState.Running(p.index, p.total, p.name, p.fraction, p.item, p.how, p.alreadyDone, stop) }, { stop }, options)
+                    job.run({ p -> _state.value = ConvertState.Running(p.index, p.total, p.name, p.fraction, p.item, p.how, p.alreadyDone, stop, p.keepsHdr) }, { stop }, options)
                 } catch (e: kotlinx.coroutines.CancellationException) {
                     throw e
                 } catch (t: Throwable) {

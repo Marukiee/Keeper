@@ -137,6 +137,7 @@
 
     <string name="settings_quality_sub">Hoger is scherper en groter</string>
     <string name="settings_quality_estimate">Ongeveer %1$s bit per pixel, een foto van 50 MP wordt dan ongeveer %2$s</string>
+    <string name="settings_quality_estimate_hdr">Ongeveer %1$s bit per pixel voor de foto zelf, plus ongeveer %3$s voor de HDR-laag die blijft, een foto van 50 MP wordt dan ongeveer %2$s</string>
     <string name="settings_tonemap_sub">Hoe de HDR-lichten naar SDR gaan</string>
     <string name="tonemap_licht">Licht</string>
     <string name="tonemap_normaal">Normaal</string>
@@ -194,7 +195,9 @@
     <string name="convert_photo_of">Foto %1$d van %2$d</string>
     <string name="convert_before">%1$d stonden al klaar van eerder</string>
     <string name="convert_how_convert">HDR naar SDR</string>
-    <string name="convert_how_camera">Camera-versie van de RAW</string>
+    <string name="convert_how_convert_hdr">HDR behouden, kleiner bestand</string>
+    <string name="convert_how_camera">Camera-versie van de RAW, als SDR</string>
+    <string name="convert_how_camera_hdr">Camera-versie van de RAW, HDR behouden</string>
     <string name="convert_how_copy">Gekopieerd zoals hij is</string>
     <string name="convert_paused_hint">Wat klaar is, blijft in de map staan. Ga door wanneer je wilt, ook morgen: Keeper pakt het op waar hij gebleven was.</string>
     <plurals name="convert_left">
@@ -215,6 +218,7 @@
     <string name="convert_saved">%1$s bespaard</string>
     <string name="convert_failed_count">%1$d mislukt</string>
     <string name="convert_result_converted">%1$d omgezet naar SDR</string>
+    <string name="convert_result_hdr">%1$d als HDR behouden en kleiner gemaakt</string>
     <string name="convert_result_copied">%1$d ongewijzigd gekopieerd</string>
     <string name="convert_result_skipped">%1$d stonden er al in de map</string>
     <string name="convert_result_size">%1$s werd %2$s</string>

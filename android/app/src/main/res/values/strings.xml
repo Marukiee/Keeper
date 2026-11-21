@@ -139,6 +139,7 @@
 
     <string name="settings_quality_sub">Higher is sharper and bigger</string>
     <string name="settings_quality_estimate">About %1$s bits per pixel, so a 50 MP photo comes to about %2$s</string>
+    <string name="settings_quality_estimate_hdr">About %1$s bits per pixel for the photo itself, plus about %3$s for the HDR layer that stays, so a 50 MP photo comes to about %2$s</string>
     <string name="settings_tonemap_sub">How the HDR highlights go to SDR</string>
     <string name="tonemap_licht">Bright</string>
     <string name="tonemap_normaal">Normal</string>
@@ -196,7 +197,9 @@
     <string name="convert_photo_of">Photo %1$d of %2$d</string>
     <string name="convert_before">%1$d were already done before</string>
     <string name="convert_how_convert">HDR to SDR</string>
-    <string name="convert_how_camera">Camera version of the RAW</string>
+    <string name="convert_how_convert_hdr">HDR kept, smaller file</string>
+    <string name="convert_how_camera">Camera version of the RAW, as SDR</string>
+    <string name="convert_how_camera_hdr">Camera version of the RAW, HDR kept</string>
     <string name="convert_how_copy">Copied as it is</string>
     <string name="convert_paused_hint">What is done stays in the folder. Continue whenever you like, even tomorrow: Keeper picks up where it stopped.</string>
     <plurals name="convert_left">
@@ -217,6 +220,7 @@
     <string name="convert_saved">%1$s saved</string>
     <string name="convert_failed_count">%1$d failed</string>
     <string name="convert_result_converted">%1$d converted to SDR</string>
+    <string name="convert_result_hdr">%1$d kept as HDR and made smaller</string>
     <string name="convert_result_copied">%1$d copied as they are</string>
     <string name="convert_result_skipped">%1$d were already in the folder</string>
     <string name="convert_result_size">%1$s became %2$s</string>

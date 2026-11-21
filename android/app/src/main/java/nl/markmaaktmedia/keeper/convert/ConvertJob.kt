@@ -40,8 +40,14 @@ class ConvertOptions(
     val forceHide: Boolean = false,
 )
 
-/** Waar de run mee bezig is. [index] telt vanaf 1; [fraction] is hoever die ene foto is (0 tot 1). [item] en [how] zijn voor het scherm: welke foto, en wat ermee gebeurt. */
-data class ConvertProgress(val index: Int, val total: Int, val name: String, val fraction: Float, val item: MediaItem? = null, val how: How? = null, val alreadyDone: Int = 0)
+/**
+ * Waar de run mee bezig is. [index] telt vanaf 1; [fraction] is hoever die ene foto is (0 tot 1). [item], [how] en [keepsHdr] zijn voor het scherm: welke foto,
+ * wat ermee gebeurt, en of de uitvoer HDR blijft (anders SDR). Dat laatste hangt per foto af van de instelling en de keuze voor deze foto.
+ */
+data class ConvertProgress(
+    val index: Int, val total: Int, val name: String, val fraction: Float, val item: MediaItem? = null, val how: How? = null, val alreadyDone: Int = 0,
+    val keepsHdr: Boolean = false,
+)
 
 class ConvertFailure(val name: String, val reason: String)
 
@@ -63,6 +69,8 @@ class ConvertReport(
     val written: List<String> = emptyList(),
     /** Van zoveel originelen is de uitvoer klaar en staan ze klaar om verborgen te worden (zie [OriginalsHider]); alleen als dat aanstaat. */
     val hideQueued: Int = 0,
+    /** Hoeveel van [converted] als HDR bleven (opnieuw gecodeerd, gain map mee); de rest is naar SDR omgezet. */
+    val keptHdr: Int = 0,
 ) {
     enum class Problem { NoLocationAccess }
     val done get() = converted + copied
@@ -134,6 +142,7 @@ class ConvertJob(private val context: Context, private val prefs: KeeperPrefs, p
         var converted = 0
         var copied = 0
         var hideQueued = 0
+        var hdrKept = 0
         val written = ArrayList<String>()
         // Wat al in de uitvoermap staat, is eerder gedaan en blijft met rust; wat Mark daaruit verwijderd heeft, is hier geen Klaar meer en komt dus weer aan de beurt.
         val alreadyDone = photos.count { it.status == Status.Done }
@@ -148,11 +157,16 @@ class ConvertJob(private val context: Context, private val prefs: KeeperPrefs, p
         for ((i, step) in plan.steps.withIndex()) {
             if (cancelled()) { stopped = true; left = plan.steps.size - i; break }
             val name = step.photo.item.name
-            onProgress(ConvertProgress(i + 1, plan.steps.size, name, 0f, step.photo.item, step.how, alreadyDone))
+            val photoSettings = settingsOf(step.photo)
+            onProgress(ConvertProgress(i + 1, plan.steps.size, name, 0f, step.photo.item, step.how, alreadyDone, photoSettings.keepsHdr))
             try {
-                val photoSettings = settingsOf(step.photo)
-                val result = writeOne(step, folder, photoSettings, cancelled) { onProgress(ConvertProgress(i + 1, plan.steps.size, name, it, step.photo.item, step.how, alreadyDone)) }
-                if (step.how == How.Copy || result.copiedAsIs) copied++ else converted++
+                val result = writeOne(step, folder, photoSettings, cancelled) {
+                    onProgress(ConvertProgress(i + 1, plan.steps.size, name, it, step.photo.item, step.how, alreadyDone, photoSettings.keepsHdr))
+                }
+                if (step.how == How.Copy || result.copiedAsIs) copied++ else {
+                    converted++
+                    if (photoSettings.keepsHdr) hdrKept++
+                }
                 bytesIn += result.bytesIn
                 bytesOut += result.bytesOut
                 written += step.outName
@@ -175,7 +189,7 @@ class ConvertJob(private val context: Context, private val prefs: KeeperPrefs, p
             }
         }
         work.deleteRecursively()
-        ConvertReport(converted, copied, skipped, failures, stopped, left, bytesIn, bytesOut, written = written, hideQueued = hideQueued)
+        ConvertReport(converted, copied, skipped, failures, stopped, left, bytesIn, bytesOut, written = written, hideQueued = hideQueued, keptHdr = hdrKept)
     }
 
     /** De naam stond er net al (een andere run of app was sneller): overslaan, geen fout. */
