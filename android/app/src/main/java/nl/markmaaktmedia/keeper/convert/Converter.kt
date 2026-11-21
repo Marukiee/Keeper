@@ -14,6 +14,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.Future
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.pow
+import kotlin.math.roundToInt
 import nl.markmaaktmedia.keeper.convert.ConvertCore.Measured
 import nl.markmaaktmedia.keeper.convert.ConvertCore.Scratch
 import nl.markmaaktmedia.keeper.scan.ToneMap
@@ -32,17 +33,28 @@ class ConvertSettings(
     val strength: Float = 1f,
     /** HDR behouden (zie [Converter.keepHdr]) in plaats van naar SDR omzetten. Bij sterkte 0 is er niets te behouden en wordt het toch SDR. */
     val keepHdr: Boolean = false,
+    /** Hoeveel pixels de uitvoer krijgt (alleen bij HDR behouden; SDR-omzetting houdt altijd alle pixels). Zie [ResolutionCheck]. */
+    val resolution: Resolution = Resolution.Full,
 ) {
-    fun withStrength(value: Float) = ConvertSettings(jpegQuality, toneMap, chroma420, value.coerceIn(0f, 1f), keepHdr)
+    fun withStrength(value: Float) = ConvertSettings(jpegQuality, toneMap, chroma420, value.coerceIn(0f, 1f), keepHdr, resolution)
 
     /** Dezelfde instellingen met HDR behouden aan of uit, voor één foto die afwijkt van de instelling. */
-    fun withKeep(value: Boolean) = ConvertSettings(jpegQuality, toneMap, chroma420, strength, value)
+    fun withKeep(value: Boolean) = ConvertSettings(jpegQuality, toneMap, chroma420, strength, value, resolution)
+
+    fun withResolution(value: Resolution) = ConvertSettings(jpegQuality, toneMap, chroma420, strength, keepHdr, value)
 
     /** Of dit een Ultra HDR-bestand wordt: aan gezet, en met een sterkte die iets overlaat. */
     val keepsHdr: Boolean get() = keepHdr && strength > 0f
 }
 
-class ConvertResult(val width: Int, val height: Int, val peak: Float, val gainMapSize: String, val colorSpace: String, val millis: Long)
+/**
+ * [width] en [height] zijn de afmetingen van de uitvoer; [resized] is of het hoofdbeeld op minder pixels is bewaard dan het origineel (zie [ResolutionCheck]),
+ * [detailDb] de score van de meting als die gedaan is.
+ */
+class ConvertResult(
+    val width: Int, val height: Int, val peak: Float, val gainMapSize: String, val colorSpace: String, val millis: Long,
+    val resized: Boolean = false, val detailDb: Double? = null,
+)
 
 class NoGainMapException : Exception("Geen Ultra HDR-gain map in dit bestand")
 
@@ -104,7 +116,8 @@ class Converter(private val stripRows: Int = 256, private val log: (String) -> U
      */
     private fun encodeStrips(
         source: JpegSource, w: Int, h: Int, settings: ConvertSettings, segments: List<ByteArray>, out: OutputStream,
-        progressBase: Float, onProgress: (Float) -> Unit, cancelled: () -> Boolean, fill: StripFill,
+        progressBase: Float, onProgress: (Float) -> Unit, cancelled: () -> Boolean,
+        outW: Int = w, outH: Int = h, fill: StripFill,
     ) {
         val workers = workerCount
         val regionFd = source.open()
@@ -121,7 +134,9 @@ class Converter(private val stripRows: Int = 256, private val log: (String) -> U
         val strips = (h + stripRows - 1) / stripRows
         var upcoming: Future<Int>? = null
         try {
-            val encoder = JpegEncoder(out, w, h, settings.jpegQuality, settings.chroma420, segments, encodePool)
+            val encoder = JpegEncoder(out, outW, outH, settings.jpegQuality, settings.chroma420, segments, encodePool)
+            // Op minder pixels bewaren: de rijen gaan eerst door de verkleiner (Lanczos), die ze in stukken aan de encoder geeft.
+            val resizer = if (outW != w || outH != h) Resampler(w, h, outW, outH, 3, stripRows) else null
             /** Decodeert strook [k] in [raws] en geeft de rijlengte in bytes terug. */
             fun decodeStrip(k: Int): Future<Int> = decodeThread.submit<Int> {
                 val y0 = k * stripRows
@@ -158,10 +173,13 @@ class Converter(private val stripRows: Int = 256, private val log: (String) -> U
                 }
                 tasks.forEach { it.await() }
                 tPixels += System.nanoTime() - t
-                encoding[k % 2] = encodeThread.submit { encoder.writeRows(buf, 0, rows) }
+                encoding[k % 2] = encodeThread.submit {
+                    if (resizer == null) encoder.writeRows(buf, 0, rows) else resizer.push(buf, rows) { small, n -> encoder.writeRows(small, 0, n) }
+                }
                 onProgress(progressBase + (1f - progressBase) * y1 / h)
             }
             encoding.forEach { it?.await() }
+            check(resizer == null || resizer.rowsOut == outH) { "verkleiner gaf ${resizer?.rowsOut} van $outH rijen" }
             encoder.finish()
             log("tijd: wachten op decoderen ${tWait / 1_000_000} ms, pixels ${tPixels / 1_000_000} ms, wachten op encoder ${tEncoder / 1_000_000} ms")
         } finally {
@@ -198,11 +216,28 @@ class Converter(private val stripRows: Int = 256, private val log: (String) -> U
         val w = layout.primary.width
         val h = layout.primary.height
         val gain = UltraHdrWriter.rewriteGainMap(ConvertCore.gainBytes(source, layout), layout.meta, settings.strength)
-        val header = OutputMetadata.ultraHdr(layout.primary, gain.size)
+        // Hoeveel pixels het hoofdbeeld krijgt: vast (Volledig, of de testwaarden) of per foto gemeten (Auto, zie ResolutionCheck). De meting is een eigen pass
+        // over het beeld (een deel van de stroken), dus Auto kost per foto een paar tienden van een seconde extra.
+        var detail: Double? = null
+        val factor: Float = when (val r = settings.resolution) {
+            Resolution.Auto -> {
+                if (w.toLong() * h < ResolutionCheck.MIN_PIXELS) 1f
+                else {
+                    detail = measureDetail(source, w, h, { onProgress(it * 0.15f) }, cancelled)
+                    if (detail != null && ResolutionCheck.decide(w.toLong() * h, detail).halve) ResolutionCheck.HALF else 1f
+                }
+            }
+            else -> r.linear ?: 1f
+        }
+        val outW = if (factor == 1f) w else (w * factor).roundToInt()
+        val outH = if (factor == 1f) h else (h * factor).roundToInt()
+        val resized = outW != w || outH != h
+        val header = OutputMetadata.ultraHdr(layout.primary, gain.size, if (resized) outW else null, if (resized) outH else null)
+        val encodeBase = if (settings.resolution == Resolution.Auto && w.toLong() * h >= ResolutionCheck.MIN_PIXELS) 0.15f else 0f
         try {
             work.parentFile?.mkdirs()
             work.outputStream().buffered(256 * 1024).use { temp ->
-                encodeStrips(source, w, h, settings, header.segments, temp, 0f, { onProgress(it * 0.95f) }, cancelled) { raw, rowBytes, _, r0, r1, _, buf ->
+                encodeStrips(source, w, h, settings, header.segments, temp, 0f, { onProgress(encodeBase + it * (0.95f - encodeBase)) }, cancelled, outW, outH) { raw, rowBytes, _, r0, r1, _, buf ->
                     ConvertCore.rgb(raw, rowBytes, r0, r1, w, buf)
                 }
             }
@@ -218,8 +253,42 @@ class Converter(private val stripRows: Int = 256, private val log: (String) -> U
             work.delete()
         }
         val ms = (System.nanoTime() - t0) / 1_000_000
-        log("HDR behouden in $ms ms, sterkte ${settings.strength}, gain map ${gain.size} bytes")
-        return ConvertResult(w, h, 2f.pow(layout.meta.max.max() * settings.strength), "${layout.gain.width}x${layout.gain.height}", "ongewijzigd", ms)
+        log("HDR behouden in $ms ms, sterkte ${settings.strength}, gain map ${gain.size} bytes, ${w}x$h naar ${outW}x$outH" + (detail?.let { ", detailscore %.1f dB".format(it) } ?: ""))
+        return ConvertResult(outW, outH, 2f.pow(layout.meta.max.max() * settings.strength), "${layout.gain.width}x${layout.gain.height}", "ongewijzigd", ms, resized, detail)
+    }
+
+    /**
+     * De meting van [ResolutionCheck]: een deel van de stroken van [CELL][ResolutionCheck.CELL] rijen gaat op volle grootte langs de stukjesverzamelaar (bij een
+     * foto van 30 MP of meer elke tweede strook). Geeft de score in dB, of null als er niets te meten viel.
+     */
+    private fun measureDetail(source: JpegSource, w: Int, h: Int, onProgress: (Float) -> Unit, cancelled: () -> Boolean): Double? {
+        val cell = ResolutionCheck.CELL
+        val stride = 2
+        val strips = h / cell
+        if (strips == 0 || w < cell) return null
+        val sampler = ResolutionCheck.Sampler(w, ResolutionCheck.keepFor(ResolutionCheck.cellCount(w, h, stride)))
+        val fd = source.open()
+        val decoder = try { BitmapRegionDecoder.newInstance(fd) } catch (t: Throwable) { fd.close(); throw t }
+        try {
+            val opts = BitmapFactory.Options().apply { inPreferredConfig = Bitmap.Config.ARGB_8888 }
+            var raw = ByteArray(0)
+            val todo = (0 until strips step stride).toList()
+            for ((i, k) in todo.withIndex()) {
+                if (cancelled()) throw CancellationException("afgebroken")
+                val bmp = decoder.decodeRegion(Rect(0, k * cell, w, (k + 1) * cell), opts) ?: error("strook ${k * cell} niet te decoderen")
+                check(bmp.width == w && bmp.height == cell) { "strook heeft ${bmp.width}x${bmp.height}" }
+                val rowBytes = bmp.rowBytes
+                if (raw.size < rowBytes * cell) raw = ByteArray(rowBytes * cell)
+                bmp.copyPixelsToBuffer(ByteBuffer.wrap(raw))
+                bmp.recycle()
+                sampler.addStrip(raw, rowBytes)
+                onProgress((i + 1).toFloat() / todo.size)
+            }
+        } finally {
+            decoder.recycle()
+            fd.close()
+        }
+        return sampler.score()
     }
 
     private fun <T> Future<T>.await(): T = try { get() } catch (e: java.util.concurrent.ExecutionException) { throw e.cause ?: e }

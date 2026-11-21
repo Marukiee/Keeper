@@ -135,6 +135,11 @@
     <string name="trash_confirm_many">%1$d foto\'s gaan naar de prullenbak. Daar kun je ze terugzetten.</string>
     <string name="trash_confirm_button">Naar prullenbak</string>
 
+    <string name="settings_resolution">Resolutie</string>
+    <string name="settings_resolution_auto">Automatisch</string>
+    <string name="settings_resolution_full">Volledig</string>
+    <string name="settings_resolution_body">Automatisch kijkt bij elke grote foto (30 MP of meer) met HDR behouden of er iets zichtbaars verloren gaat met de helft van de pixels (25 MP bij 50). Zo niet, dan wordt de foto op de helft van de pixels bewaard en is de foto zelf ongeveer 40% kleiner. Volledig houdt altijd alle pixels.</string>
+    <string name="convert_result_resized">%1$d op de helft van de pixels bewaard, niets zichtbaars verloren</string>
     <string name="settings_quality_sub">Hoger is scherper en groter</string>
     <string name="settings_quality_estimate">Ongeveer %1$s bit per pixel, een foto van 50 MP wordt dan ongeveer %2$s</string>
     <string name="settings_quality_estimate_hdr">Ongeveer %1$s bit per pixel voor de foto zelf, plus ongeveer %3$s voor de HDR-laag die blijft, een foto van 50 MP wordt dan ongeveer %2$s</string>

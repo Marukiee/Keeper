@@ -126,6 +126,7 @@ private fun reportText(report: ConvertReport, outputFolder: String): String {
     // Wat omgezet is, bleef per foto HDR (alleen kleiner gemaakt) of werd SDR.
     if (report.keptHdr > 0) lines += stringResource(R.string.convert_result_hdr, report.keptHdr)
     if (report.converted - report.keptHdr > 0) lines += stringResource(R.string.convert_result_converted, report.converted - report.keptHdr)
+    if (report.resized > 0) lines += stringResource(R.string.convert_result_resized, report.resized)
     if (report.copied > 0) lines += stringResource(R.string.convert_result_copied, report.copied)
     if (report.skipped > 0) lines += stringResource(R.string.convert_result_skipped, report.skipped)
     // Bij een of twee foto's (alleen deze omzetten): onder welke naam ze staan, want een nieuwe versie heet anders dan de eerste.

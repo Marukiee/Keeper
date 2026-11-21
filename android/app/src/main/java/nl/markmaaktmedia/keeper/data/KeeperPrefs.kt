@@ -41,6 +41,7 @@ class KeeperPrefs(private val context: Context) {
         val hdrStrength = intPreferencesKey("hdr_strength")
         val hdrStrengthByName = stringSetPreferencesKey("hdr_strength_by_name")
         val keepHdr = booleanPreferencesKey("keep_hdr")
+        val resolution = stringPreferencesKey("resolution")
         val keepHdrByName = stringSetPreferencesKey("keep_hdr_by_name")
         val viewerOptions = booleanPreferencesKey("viewer_options")
         val hideOriginals = booleanPreferencesKey("hide_originals")
@@ -155,6 +156,10 @@ class KeeperPrefs(private val context: Context) {
      */
     val keepHdr: Flow<Boolean> = data.map { it[K.keepHdr] ?: true }.distinctUntilChanged()
     suspend fun setKeepHdr(on: Boolean) = edit { it[K.keepHdr] = on }
+
+    /** Hoeveel pixels de uitvoer krijgt: "auto" (per foto de helft als de meting daar niets zichtbaars aan verliest) of "full" (altijd alle). Zie `ResolutionCheck`. */
+    val resolution: Flow<String> = data.map { it[K.resolution] ?: "auto" }.distinctUntilChanged()
+    suspend fun setResolution(id: String) = edit { it[K.resolution] = id }
 
     /** HDR of SDR per foto (bestandsnaam naar waar of onwaar), voor wat afwijkt van [keepHdr]. Staat een foto er niet in, dan geldt de instelling. */
     val keepHdrByName: Flow<Map<String, Boolean>> = data.map { KeepEntries.decode(it[K.keepHdrByName]) }.distinctUntilChanged()

@@ -21,11 +21,12 @@ import nl.markmaaktmedia.keeper.convert.HdrPreview
 import nl.markmaaktmedia.keeper.convert.hdrPreviewSupported
 import nl.markmaaktmedia.keeper.convert.JpegSource
 import nl.markmaaktmedia.keeper.convert.JpegSegments
+import nl.markmaaktmedia.keeper.convert.Resolution
 import nl.markmaaktmedia.keeper.scan.ToneMap
 
 /**
  * adb shell am broadcast -n nl.markmaaktmedia.keeper.debug/nl.markmaaktmedia.keeper.debug.ConvertDebugReceiver \
- *   -a nl.markmaaktmedia.keeper.CONVERT --es in foto.jpg --es out uit.jpg --ei q 92 --es tonemap normaal [--ei strength 50] [--ez keephdr true]
+ *   -a nl.markmaaktmedia.keeper.CONVERT --es in foto.jpg --es out uit.jpg --ei q 92 --es tonemap normaal [--ei strength 50] [--ez keephdr true] [--es resolution full|auto|half|quarter]
  * Bestanden staan in de eigen map van de app (filesDir); de uitslag staat in logcat onder KeeperConvert.
  *
  * Met `--es ids 123,456` draait in plaats daarvan de echte keten (`ConvertJob`: plan, lezen via MediaStore, uitvoer in MediaStore) op die
@@ -48,13 +49,15 @@ class ConvertDebugReceiver : BroadcastReceiver() {
         val chroma420 = intent.getStringExtra("chroma") != "444"
         val strength = intent.getIntExtra("strength", 100).coerceIn(0, 100) / 100f
         val keepHdr = intent.getBooleanExtra("keephdr", false)
+        // `--es resolution full|auto|half|quarter`: alleen bij HDR behouden; standaard alle pixels.
+        val resolution = Resolution.of(intent.getStringExtra("resolution") ?: "full")
         thread(name = "convert-debug") {
             try {
                 val input = File(context.filesDir, name)
                 val output = File(context.filesDir, outName)
                 val res = BufferedOutputStream(output.outputStream(), 1 shl 16).use { out ->
                     val converter = Converter(log = { Log.i(TAG, it) })
-                    val settings = ConvertSettings(q, tone, chroma420, strength, keepHdr)
+                    val settings = ConvertSettings(q, tone, chroma420, strength, keepHdr, resolution)
                     val source = JpegSource { ParcelFileDescriptor.open(input, ParcelFileDescriptor.MODE_READ_ONLY) }
                     if (settings.keepsHdr) converter.keepHdr(source, out, settings, File(context.cacheDir, "keep-debug.tmp"))
                     else converter.convert(

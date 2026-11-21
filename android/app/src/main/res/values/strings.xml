@@ -137,6 +137,11 @@
     <string name="trash_confirm_many">%1$d photos go to the trash. You can restore them there.</string>
     <string name="trash_confirm_button">Move to trash</string>
 
+    <string name="settings_resolution">Resolution</string>
+    <string name="settings_resolution_auto">Automatic</string>
+    <string name="settings_resolution_full">Full</string>
+    <string name="settings_resolution_body">Automatic checks every large photo (30 MP or more) while keeping HDR: if half the pixels (25 MP of 50) loses nothing visible, the photo is saved at half the pixels, which makes the photo itself about 40% smaller. Full always keeps every pixel.</string>
+    <string name="convert_result_resized">%1$d saved at half the pixels, nothing visible lost</string>
     <string name="settings_quality_sub">Higher is sharper and bigger</string>
     <string name="settings_quality_estimate">About %1$s bits per pixel, so a 50 MP photo comes to about %2$s</string>
     <string name="settings_quality_estimate_hdr">About %1$s bits per pixel for the photo itself, plus about %3$s for the HDR layer that stays, so a 50 MP photo comes to about %2$s</string>

@@ -36,6 +36,8 @@ class ConvertOptions(
     val only: Set<Long>? = null, val folder: String? = null, val readOriginal: Boolean = true, val newVersion: Boolean = false,
     /** Alleen voor de debug-ontvanger: HDR behouden aan of uit, los van de instelling. Null is wat in de instellingen staat. */
     val keepHdr: Boolean? = null,
+    /** Alleen voor de debug-ontvanger: de resolutie los van de instelling. */
+    val resolution: Resolution? = null,
     /** Alleen voor de debug-ontvanger: de originelen van deze run toch voor verbergen klaarzetten, ook bij een test of "alleen deze foto". */
     val forceHide: Boolean = false,
 )
@@ -71,6 +73,8 @@ class ConvertReport(
     val hideQueued: Int = 0,
     /** Hoeveel van [converted] als HDR bleven (opnieuw gecodeerd, gain map mee); de rest is naar SDR omgezet. */
     val keptHdr: Int = 0,
+    /** Hoeveel van [converted] op de helft van de pixels zijn bewaard omdat de meting daar niets zichtbaars aan verloor (zie [ResolutionCheck]). */
+    val resized: Int = 0,
 ) {
     enum class Problem { NoLocationAccess }
     val done get() = converted + copied
@@ -118,6 +122,7 @@ class ConvertJob(private val context: Context, private val prefs: KeeperPrefs, p
             jpegQuality = (prefs.quality.first() - 2).coerceIn(50, 98),
             toneMap = ToneMap.of(prefs.toneMap.first()),
             keepHdr = options.keepHdr ?: prefs.keepHdr.first(),
+            resolution = options.resolution ?: Resolution.of(prefs.resolution.first()),
         )
         // De HDR-sterkte: de standaard uit Instellingen, of wat Mark voor deze ene foto instelde (per bestandsnaam van het origineel).
         val defaultStrength = prefs.hdrStrength.first()
@@ -143,6 +148,7 @@ class ConvertJob(private val context: Context, private val prefs: KeeperPrefs, p
         var copied = 0
         var hideQueued = 0
         var hdrKept = 0
+        var resizedCount = 0
         val written = ArrayList<String>()
         // Wat al in de uitvoermap staat, is eerder gedaan en blijft met rust; wat Mark daaruit verwijderd heeft, is hier geen Klaar meer en komt dus weer aan de beurt.
         val alreadyDone = photos.count { it.status == Status.Done }
@@ -166,6 +172,7 @@ class ConvertJob(private val context: Context, private val prefs: KeeperPrefs, p
                 if (step.how == How.Copy || result.copiedAsIs) copied++ else {
                     converted++
                     if (photoSettings.keepsHdr) hdrKept++
+                    if (result.resized) resizedCount++
                 }
                 bytesIn += result.bytesIn
                 bytesOut += result.bytesOut
@@ -189,13 +196,13 @@ class ConvertJob(private val context: Context, private val prefs: KeeperPrefs, p
             }
         }
         work.deleteRecursively()
-        ConvertReport(converted, copied, skipped, failures, stopped, left, bytesIn, bytesOut, written = written, hideQueued = hideQueued, keptHdr = hdrKept)
+        ConvertReport(converted, copied, skipped, failures, stopped, left, bytesIn, bytesOut, written = written, hideQueued = hideQueued, keptHdr = hdrKept, resized = resizedCount)
     }
 
     /** De naam stond er net al (een andere run of app was sneller): overslaan, geen fout. */
     private class AlreadyThere : Exception()
 
-    private class Written(val bytesIn: Long, val bytesOut: Long, val copiedAsIs: Boolean, val outputId: Long = -1)
+    private class Written(val bytesIn: Long, val bytesOut: Long, val copiedAsIs: Boolean, val outputId: Long = -1, val resized: Boolean = false)
 
     private fun writeOne(step: Step, folder: String, settings: ConvertSettings, cancelled: () -> Boolean, progress: (Float) -> Unit): Written {
         val item = step.photo.item
@@ -216,7 +223,7 @@ class ConvertJob(private val context: Context, private val prefs: KeeperPrefs, p
             }
             if (counted.count == 0L) throw java.io.IOException("leeg resultaat")
             store.finish(target)
-            return Written(written.bytesIn, counted.count, written.copiedAsIs, ContentUris.parseId(target))
+            return Written(written.bytesIn, counted.count, written.copiedAsIs, ContentUris.parseId(target), written.resized)
         } catch (e: Throwable) {
             store.abort(target)
             throw e
@@ -240,9 +247,9 @@ class ConvertJob(private val context: Context, private val prefs: KeeperPrefs, p
     private fun convert(source: JpegSource, size: Long, out: OutputStream, settings: ConvertSettings, cancelled: () -> Boolean, progress: (Float) -> Unit): Written =
         try {
             val converter = Converter(log = { android.util.Log.d("KeeperConvert", it) })
-            if (settings.keepsHdr) converter.keepHdr(source, out, settings, File(work, "keep-hdr.jpg"), progress, cancelled)
+            val result = if (settings.keepsHdr) converter.keepHdr(source, out, settings, File(work, "keep-hdr.jpg"), progress, cancelled)
             else converter.convert(source, out, settings, { head, _, _ -> OutputMetadata.segments(head) }, progress, cancelled)
-            Written(size, 0, false)
+            Written(size, 0, false, resized = result.resized)
         } catch (_: NoGainMapException) {
             ParcelFileDescriptor.AutoCloseInputStream(source.open()).use { copy(it, out, size, progress) }
             Written(size, 0, true)

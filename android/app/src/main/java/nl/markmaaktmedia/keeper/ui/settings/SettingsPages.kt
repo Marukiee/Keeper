@@ -29,6 +29,7 @@ import nl.markmaaktmedia.keeper.AppLanguage
 import nl.markmaaktmedia.keeper.R
 import nl.markmaaktmedia.keeper.graph
 import nl.markmaaktmedia.keeper.lightroom.LookPreset
+import nl.markmaaktmedia.keeper.convert.Resolution
 import nl.markmaaktmedia.keeper.scan.Classifier
 import nl.markmaaktmedia.keeper.scan.JpegQuality
 import nl.markmaaktmedia.keeper.scan.ToneMap
@@ -128,6 +129,7 @@ internal fun ConvertPage(onBack: () -> Unit, contentPadding: PaddingValues) {
     val toneMapId by prefs.toneMap.collectAsState(initial = "normaal")
     val toneMap = ToneMap.of(toneMapId)
     val keepHdr by prefs.keepHdr.collectAsState(initial = true)
+    val resolutionId by prefs.resolution.collectAsState(initial = "auto")
     val hideOriginals by prefs.hideOriginals.collectAsState(initial = false)
     val context = LocalContext.current
     val hider = context.graph.hider
@@ -141,8 +143,8 @@ internal fun ConvertPage(onBack: () -> Unit, contentPadding: PaddingValues) {
 
     SettingsPageFrame(stringResource(R.string.settings_convert), onBack, contentPadding) {
         SettingsGroup {
-            SwitchRow(0, 4, KeeperIcons.Photos, stringResource(R.string.settings_keep_hdr), stringResource(R.string.settings_keep_hdr_sub), keepHdr, { scope.launch { prefs.setKeepHdr(it) } })
-            ContentRow(1, 4, KeeperIcons.Image, stringResource(R.string.settings_quality)) {
+            SwitchRow(0, 5, KeeperIcons.Photos, stringResource(R.string.settings_keep_hdr), stringResource(R.string.settings_keep_hdr_sub), keepHdr, { scope.launch { prefs.setKeepHdr(it) } })
+            ContentRow(1, 5, KeeperIcons.Image, stringResource(R.string.settings_quality)) {
                 SegmentedPillRow(JpegQuality.options, quality, { "q$it" }, { scope.launch { prefs.setQuality(it) } }, equalWidth = true)
                 val bpp = JpegQuality.bitsPerPixel(quality)
                 val bppText = String.format(Locale.getDefault(), "%.2f", bpp)
@@ -155,14 +157,24 @@ internal fun ConvertPage(onBack: () -> Unit, contentPadding: PaddingValues) {
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            ContentRow(2, 4, KeeperIcons.Tune, stringResource(R.string.settings_hdr_strength)) {
+            // Hoeveel pixels de uitvoer krijgt: Automatisch laat de omzetting per grote foto meten of de helft van de pixels iets zichtbaars kost (alleen bij HDR behouden).
+            ContentRow(2, 5, KeeperIcons.Image, stringResource(R.string.settings_resolution)) {
+                val autoLabel = stringResource(R.string.settings_resolution_auto)
+                val fullLabel = stringResource(R.string.settings_resolution_full)
+                SegmentedPillRow(listOf(Resolution.Auto, Resolution.Full), Resolution.of(resolutionId), { if (it == Resolution.Auto) autoLabel else fullLabel }, { scope.launch { prefs.setResolution(it.id) } }, equalWidth = true)
+                Text(
+                    stringResource(R.string.settings_resolution_body),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            ContentRow(3, 5, KeeperIcons.Tune, stringResource(R.string.settings_hdr_strength)) {
                 HdrStrengthSlider(strength, { strength = it }, onFinished = { scope.launch { prefs.setHdrStrength(strength) } })
                 Text(
                     stringResource(R.string.settings_hdr_strength_body),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            ContentRow(3, 4, KeeperIcons.Tune, stringResource(R.string.settings_tonemap)) {
+            ContentRow(4, 5, KeeperIcons.Tune, stringResource(R.string.settings_tonemap)) {
                 val names = mapOf(
                     ToneMap.Licht to stringResource(R.string.tonemap_licht),
                     ToneMap.Normaal to stringResource(R.string.tonemap_normaal),

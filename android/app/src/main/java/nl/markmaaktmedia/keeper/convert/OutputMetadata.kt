@@ -20,10 +20,11 @@ object OutputMetadata {
      * container-lijst, het ISO-versieblok en de MPF-directory, in de volgorde van de Oppo (Exif, XMP, ISO, MPF, ICC). De MPF staat er met
      * lengte 0 in; de aanroeper zet de echte lengte erin met [UltraHdrWriter.mpf] zodra het hoofdbeeld klaar is. Het segment is altijd even lang.
      */
-    fun ultraHdr(head: JpegHead, gainLength: Int): UltraHdrHeader {
+    fun ultraHdr(head: JpegHead, gainLength: Int, outWidth: Int? = null, outHeight: Int? = null): UltraHdrHeader {
         val list = ArrayList<ByteArray>()
+        // Bewaren we de foto op andere afmetingen, dan krijgt de Exif die ook (de rest blijft zoals de camera het schreef).
         head.segments.firstOrNull { it.marker == JpegHead.APP1 && it.startsWith("Exif\u0000\u0000") }
-            ?.payload?.let { list += JpegSegments.app(JpegSegments.APP1, it) }
+            ?.payload?.let { list += JpegSegments.app(JpegSegments.APP1, if (outWidth != null && outHeight != null) ExifDimensions.patch(it, outWidth, outHeight) else it) }
         list += JpegSegments.app(JpegSegments.APP1, UltraHdrWriter.primaryXmp(gainLength))
         list += JpegSegments.app(JpegSegments.APP2, UltraHdrWriter.isoVersionBlock())
         val mpfOffset = 2L + list.sumOf { it.size }
