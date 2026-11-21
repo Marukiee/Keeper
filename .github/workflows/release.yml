@@ -153,14 +153,19 @@ jobs:
           name: android
           path: dist
 
-      # The app shows this text under the update. It is the commit subjects since the previous tag.
+      # The app shows this text under the update. It is .github/release-notes/<tag>.md when that file exists, else the commit subjects since the previous tag.
       - name: Release notes
         env:
           TAG: ${{ needs.android.outputs.tag }}
         run: |
           set -euo pipefail
-          prev=$(git tag --list 'v*' --sort=-v:refname | grep -vx "$TAG" | head -n 1 || true)
-          git log --no-merges --pretty='- %s' ${prev:+"$prev..HEAD"} > notes.md
+          if [ -f ".github/release-notes/$TAG.md" ]; then
+            # Written by hand for this release (English first, the app shows that part).
+            cp ".github/release-notes/$TAG.md" notes.md
+          else
+            prev=$(git tag --list 'v*' --sort=-v:refname | grep -vx "$TAG" | head -n 1 || true)
+            git log --no-merges --pretty='- %s' ${prev:+"$prev..HEAD"} > notes.md
+          fi
           cat notes.md
 
       # The app looks for these names in releases/latest: Keeper.apk and Keeper.apk.sha256.

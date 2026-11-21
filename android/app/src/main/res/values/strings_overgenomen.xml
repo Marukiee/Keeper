@@ -17,7 +17,7 @@
     <string name="language_restart_confirm">Restart</string>
     <string name="language_restart_title">Restart needed</string>
     <string name="settings_auto_update">Check for updates automatically</string>
-    <string name="settings_auto_update_sub">Every time you open the app</string>
+    <string name="settings_auto_update_sub">When you open the app, at most every six hours</string>
     <string name="settings_backup">Backup</string>
     <string name="settings_cat_updates">Updates and backup</string>
     <string name="settings_check_update">Check now</string>

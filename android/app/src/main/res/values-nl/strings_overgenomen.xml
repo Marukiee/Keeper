@@ -17,7 +17,7 @@
     <string name="language_restart_confirm">Herstarten</string>
     <string name="language_restart_title">Opnieuw opstarten nodig</string>
     <string name="settings_auto_update">Automatisch op updates controleren</string>
-    <string name="settings_auto_update_sub">Elke keer als je de app opent</string>
+    <string name="settings_auto_update_sub">Als je de app opent, hooguit elke zes uur</string>
     <string name="settings_backup">Back-up</string>
     <string name="settings_cat_updates">Updates en back-up</string>
     <string name="settings_check_update">Nu controleren</string>

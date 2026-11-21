@@ -32,7 +32,7 @@ import java.security.MessageDigest
  * installs it over the running app.
  *
  * The same approach as MarkMaaktAI: no update service, no polling. The check runs
- * when the app starts, at most once a day, and when the button is pressed, so an
+ * when the app starts, at most every six hours, and when the button is pressed, so an
  * offline phone spends nothing on it. Two things are new: the download is checked
  * against the SHA-256 in the release, and the install goes through PackageInstaller,
  * so Android can apply later updates without another screen when it is allowed to.
@@ -54,7 +54,7 @@ class UpdateRepository(
     val releasesPageUrl: String
         get() = "https://github.com/${BuildConfig.GITHUB_OWNER}/${BuildConfig.GITHUB_REPO}/releases"
 
-    /** On start-up: at most once a day, and only when the person has not switched it off. */
+    /** On start-up: at most every six hours, and only when the person has not switched it off. */
     suspend fun checkIfDue() {
         if (!prefs.autoUpdateCheck.first()) return
         val last = prefs.lastUpdateCheck.first()
