@@ -80,7 +80,7 @@ import nl.markmaaktmedia.keeper.ui.components.bouncyClickable
 import nl.markmaaktmedia.keeper.ui.theme.KeeperIcons
 import nl.markmaaktmedia.keeper.ui.theme.KeeperMotion
 import nl.markmaaktmedia.keeper.ui.theme.PillShape
-import nl.markmaaktmedia.keeper.ui.update.UpdateBanner
+import nl.markmaaktmedia.keeper.ui.update.UpdateCard
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -216,7 +216,7 @@ fun GalleryScreen(
 
     Column(Modifier.fillMaxSize()) {
         Column(Modifier.padding(horizontal = 20.dp)) {
-            UpdateBanner(Modifier.padding(top = 8.dp))
+            UpdateCard(Modifier.padding(top = 8.dp))
             ScreenHeader(
                 stringResource(R.string.gallery_title),
                 if (hasPermission && state.photos.isNotEmpty()) stringResource(R.string.gallery_counts, toReview, state.summary.goingCount, notKept) else null,

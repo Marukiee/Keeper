@@ -11,6 +11,8 @@ data class ReleaseInfo(
     val sha256Url: String?,
     val htmlUrl: String,
     val publishedAt: String,
+    /** De hele tekst van de release, voor de korte regels op de kaart (zie [releaseHighlights]). */
+    val body: String = "",
 )
 
 /** Where the update flow currently is. Drives the banner and the settings row. */

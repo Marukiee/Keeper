@@ -30,12 +30,9 @@
     <string name="swipe_unpin">Losmaken</string>
     <string name="update_allow">Toestaan</string>
     <string name="update_available">Keeper %1$s is beschikbaar</string>
-    <string name="update_banner_title">Update %1$s</string>
     <string name="update_confirm_hint">Android wil dat je bevestigt</string>
-    <string name="update_download">Download</string>
     <string name="update_downloading">Downloaden %1$d%%</string>
     <string name="update_failed">De update is mislukt</string>
-    <string name="update_install">Installeren</string>
     <string name="update_later">Later</string>
     <string name="update_needs_permission">Sta installeren vanuit Keeper toe en kom terug</string>
     <string name="update_on_version">Je hebt %1$s</string>
@@ -48,5 +45,4 @@
     <string name="update_reason_no_apk">Bij die versie zit geen appbestand</string>
     <string name="update_reason_status">Het downloaden mislukte (status %1$d)</string>
     <string name="update_reason_unreachable">GitHub is niet bereikbaar</string>
-    <string name="update_retry">Probeer opnieuw</string>
 </resources>

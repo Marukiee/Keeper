@@ -279,4 +279,11 @@
         <item quantity="one">%1$d origineel naar de prullenbak</item>
         <item quantity="other">%1$d originelen naar de prullenbak</item>
     </plurals>
+    <string name="update_card_title">Nieuwe versie %1$s</string>
+    <string name="update_card_update">Bijwerken</string>
+    <string name="update_card_progress">%1$s van %2$s MB</string>
+    <string name="update_card_installing">Installeren…</string>
+    <string name="update_card_installing_title">%1$s wordt geïnstalleerd</string>
+    <string name="update_card_installing_sub">De app start zo opnieuw</string>
+    <string name="update_card_retry">Opnieuw</string>
 </resources>

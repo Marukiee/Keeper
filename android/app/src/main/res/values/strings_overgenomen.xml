@@ -30,12 +30,9 @@
     <string name="swipe_unpin">Unpin</string>
     <string name="update_allow">Allow</string>
     <string name="update_available">Keeper %1$s is available</string>
-    <string name="update_banner_title">Update %1$s</string>
     <string name="update_confirm_hint">Android wants you to confirm</string>
-    <string name="update_download">Download</string>
     <string name="update_downloading">Downloading %1$d%%</string>
     <string name="update_failed">The update failed</string>
-    <string name="update_install">Install</string>
     <string name="update_later">Later</string>
     <string name="update_needs_permission">Allow installing from Keeper and come back</string>
     <string name="update_on_version">You have %1$s</string>
@@ -48,5 +45,4 @@
     <string name="update_reason_no_apk">This version has no app file</string>
     <string name="update_reason_status">The download failed (status %1$d)</string>
     <string name="update_reason_unreachable">GitHub cannot be reached</string>
-    <string name="update_retry">Try again</string>
 </resources>

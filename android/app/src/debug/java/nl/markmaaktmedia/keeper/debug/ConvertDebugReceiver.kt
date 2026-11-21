@@ -40,6 +40,7 @@ class ConvertDebugReceiver : BroadcastReceiver() {
         val pending = goAsync()
         intent.getStringExtra("ids")?.let { runJob(context, intent, it, pending); return }
         intent.getStringExtra("hideop")?.let { hideOp(context, it, intent, pending); return }
+        intent.getStringExtra("update")?.let { updateOp(context, it, pending); return }
         intent.getStringExtra("inspect")?.let { inspect(context, it); pending.finish(); return }
         intent.getStringExtra("hdrpreview")?.let { hdrPreview(context, it, intent.getIntExtra("strength", 100).coerceIn(0, 100) / 100f); pending.finish(); return }
         val name = intent.getStringExtra("in") ?: return
@@ -95,6 +96,30 @@ class ConvertDebugReceiver : BroadcastReceiver() {
                 }
             } catch (t: Throwable) {
                 Log.e(TAG, "HIDEOP MISLUKT $op", t)
+            } finally {
+                pending.finish()
+            }
+        }
+    }
+
+    /**
+     * De updatekaart bekijken zonder echte release: `--es update preview` toont een nieuwe versie 9.9.9 (22 MB) die je met Bijwerken door de
+     * hele overgang kunt halen, `--es update fail` toont de foutkaart, `--es update clear` haalt de kaart weg.
+     */
+    private fun updateOp(context: Context, op: String, pending: PendingResult) {
+        thread(name = "update-debug") {
+            try {
+                val graph = context.applicationContext.graph
+                runBlocking {
+                    when (op) {
+                        "preview" -> { graph.prefs.setDismissedUpdate(""); graph.updater.showPreview() }
+                        "fail" -> graph.updater.reportInstallFailure("GitHub kan niet worden bereikt")
+                        "clear" -> graph.updater.reset()
+                    }
+                }
+                Log.i(TAG, "UPDATEOP $op")
+            } catch (t: Throwable) {
+                Log.e(TAG, "UPDATEOP MISLUKT $op", t)
             } finally {
                 pending.finish()
             }

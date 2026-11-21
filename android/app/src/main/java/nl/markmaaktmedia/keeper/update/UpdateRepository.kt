@@ -9,7 +9,10 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import android.util.Log
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -139,6 +142,7 @@ class UpdateRepository(
                     sha256Url = sha,
                     htmlUrl = root.optString("html_url").ifBlank { releasesPageUrl },
                     publishedAt = root.optString("published_at"),
+                    body = root.optString("body"),
                 )
             }
         }.getOrElse { error ->
@@ -147,14 +151,32 @@ class UpdateRepository(
         }
     }
 
-    /** Developer options: shows a fake update so the banner can be pressed through. */
+    /** Debug builds: shows a fake update (22 MB, two lines of notes) so the card can be pressed through without a real release. */
     fun showPreview() {
         _state.value = UpdateState.Available(
             ReleaseInfo(
                 tag = PREVIEW_TAG, versionName = "9.9.9", title = "Preview", changelog = "", apkUrl = null,
-                apkSizeBytes = 0, sha256Url = null, htmlUrl = "", publishedAt = "",
+                apkSizeBytes = 22_000_000, sha256Url = null, htmlUrl = "", publishedAt = "",
+                body = "## What's new (English)\n\n- Gallery with a quick button for the originals\n- Smaller photos at half the pixels\n\n" +
+                    "## Wat is nieuw (Nederlands)\n\n- Galerij met een snelle knop voor de originelen\n- Kleinere foto's op de helft van de pixels",
             ),
         )
+    }
+
+    /** The app's own scope: a download goes on when the person switches screens, which would end a scope tied to one screen. */
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    /** The card's button: starts the download and install, unless one is under way already. */
+    fun startUpdate(release: ReleaseInfo) {
+        when (_state.value) {
+            is UpdateState.Downloading, is UpdateState.Installing, is UpdateState.ReadyToInstall, is UpdateState.AwaitingConfirmation -> return
+            else -> scope.launch { downloadAndInstall(release) }
+        }
+    }
+
+    /** The card's "Retry". */
+    fun startRetry() {
+        scope.launch { retry() }
     }
 
     /** The release the person is in the middle of installing, so a failure can offer to carry on. */
@@ -169,11 +191,16 @@ class UpdateRepository(
     suspend fun downloadAndInstall(release: ReleaseInfo) {
         current = release
         if (release.tag == PREVIEW_TAG) {
-            for (step in 0..20) {
-                _state.value = UpdateState.Downloading(release, step / 20f)
-                kotlinx.coroutines.delay(120)
+            for (step in 0..40) {
+                _state.value = UpdateState.Downloading(release, step / 40f)
+                kotlinx.coroutines.delay(90)
             }
+            // Like the real thing: it installs at once, and the card goes when the app would restart.
             _state.value = UpdateState.ReadyToInstall(release, PREVIEW_TAG)
+            kotlinx.coroutines.delay(300)
+            _state.value = UpdateState.Installing(release)
+            kotlinx.coroutines.delay(2600)
+            _state.value = UpdateState.Idle
             return
         }
         if (!canRequestInstalls()) {
@@ -289,7 +316,7 @@ class UpdateRepository(
             val id = installer.createSession(params)
             installer.openSession(id).use { session ->
                 file.inputStream().use { input ->
-                    session.openWrite("tandem.apk", 0, file.length()).use { output ->
+                    session.openWrite("keeper.apk", 0, file.length()).use { output ->
                         input.copyTo(output, 64 * 1024)
                         session.fsync(output)
                     }

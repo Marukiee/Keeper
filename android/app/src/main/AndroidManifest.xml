@@ -12,6 +12,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Een update die Keeper zelf installeert gaat zonder tweede tik, zodra Keeper de installer van zichzelf is (na de eerste update via de app). -->
+    <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
     <!--
         Alleen voor "Originelen verbergen": met deze speciale toegang (Mark zet hem zelf aan in de systeeminstellingen) kan Keeper het origineel naar de
         prullenbak verplaatsen zonder dat Android elke keer om een bevestiging vraagt. Zonder blijft het werken, met één bevestiging per pakket.
