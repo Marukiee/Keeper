@@ -54,6 +54,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -61,6 +62,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
@@ -277,10 +279,12 @@ private fun Actions(phase: Phase, progress: Float, style: UpdateCardStyle, restL
     // Doorzichtigheid is een tween, geen veer: een veer laat het knopje flikkeren.
     val laterAlpha by animateFloatAsState(if (phase == Phase.Rest) 1f else 0f, tween(260), label = "laterAlpha")
     val barFill by animateColorAsState(
-        when (phase) { Phase.Rest -> colors.primary; Phase.Busy -> colors.surfaceContainerHighest; Phase.Installing -> colors.primaryContainer },
+        // Het spoor van de download is de lichte tint, de vulling het volle primair: dat leest als een balk. Is hij vol (installeren), dan is de hele
+        // balk de vulling, zodat er geen kleursprong is.
+        when (phase) { Phase.Rest -> colors.primary; Phase.Busy -> colors.primaryContainer; Phase.Installing -> colors.primary },
         motion.colour(), label = "barFill",
     )
-    val ink by animateColorAsState(if (phase == Phase.Rest) colors.onPrimary else colors.onPrimaryContainer, motion.colour(), label = "barInk")
+    val ink by animateColorAsState(if (phase == Phase.Busy) colors.onPrimaryContainer else colors.onPrimary, motion.colour(), label = "barInk")
     val shownProgress by animateFloatAsState(progress, motion.spatial(), label = "updateProgress")
     val fillAlpha by animateFloatAsState(if (phase == Phase.Busy) 1f else 0f, tween(400), label = "fillAlpha")
     val pill = RoundedCornerShape(percent = 50)
@@ -305,21 +309,27 @@ private fun Actions(phase: Phase, progress: Float, style: UpdateCardStyle, restL
         ) {
             Box(
                 Modifier.fillMaxHeight().fillMaxWidth(shownProgress.coerceIn(0f, 1f)).graphicsLayer { alpha = fillAlpha }
-                    .clip(pill).background(colors.primaryContainer),
+                    .clip(pill).background(colors.primary),
             )
             if (phase == Phase.Installing) Sheen(Modifier.matchParentSize())
             AnimatedContent(
                 targetState = phase, transitionSpec = slideUp(3, style), modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center, label = "updateLabel",
             ) { p ->
+                val label = when (p) {
+                    Phase.Rest -> restLabel
+                    Phase.Busy -> "${(progress * 100).toInt()}%"
+                    Phase.Installing -> stringResource(R.string.markupdate_installing)
+                }
+                val textStyle = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold, fontFeatureSettings = "tnum")
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(
-                        when (p) {
-                            Phase.Rest -> restLabel
-                            Phase.Busy -> "${(progress * 100).toInt()}%"
-                            Phase.Installing -> stringResource(R.string.markupdate_installing)
-                        },
-                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold, fontFeatureSettings = "tnum"), color = ink, maxLines = 1,
-                    )
+                    Text(label, style = textStyle, color = ink, maxLines = 1)
+                    // Het percentage staat half op de vulling en half op het spoor: het stuk boven de vulling is wit op primair, de rest donker op de tint.
+                    if (p == Phase.Busy) {
+                        Box(
+                            Modifier.fillMaxSize().drawWithContent { clipRect(right = size.width * shownProgress.coerceIn(0f, 1f)) { this@drawWithContent.drawContent() } },
+                            contentAlignment = Alignment.Center,
+                        ) { Text(label, style = textStyle, color = colors.onPrimary, maxLines = 1) }
+                    }
                 }
             }
         }
